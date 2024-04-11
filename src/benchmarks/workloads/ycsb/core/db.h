@@ -1,10 +1,8 @@
-//
-//  db.h
-//  YCSB-cpp
-//
-//  Copyright (c) 2020 Youngjae Lee <ls4154.lee@gmail.com>.
-//  Copyright (c) 2014 Jinglei Ren <jinglei@ren.systems>.
-//
+/*
+* @details: modified to evaluate the datastructures instead of databases.
+*
+* @author: Cristian Sandu <cristian.sandu@tum.de>
+*/
 
 #ifndef YCSB_C_DB_H_
 #define YCSB_C_DB_H_
@@ -13,6 +11,9 @@
 
 #include <vector>
 #include <string>
+
+#include <dlfcn.h>
+#include <iostream>
 
 namespace ycsbc {
 
@@ -35,7 +36,7 @@ class DB {
   ///
   /// Initializes any state for accessing this DB.
   ///
-  virtual void Init() { }
+  virtual int Init() { return 0; }
   ///
   /// Clears any state for accessing this DB.
   ///
@@ -50,9 +51,7 @@ class DB {
   /// @param result A vector of field/value pairs for the result.
   /// @return Zero on success, or a non-zero error code on error/record-miss.
   ///
-  virtual Status Read(const std::string &table, const std::string &key,
-                   const std::vector<std::string> *fields,
-                   std::vector<Field> &result) = 0;
+  virtual Status Read(const std::string &table, const uint64_t key) = 0;
   ///
   /// Performs a range scan for a set of records in the database.
   /// Field/value pairs from the result are stored in a vector.
@@ -65,9 +64,8 @@ class DB {
   ///        pairs for one record
   /// @return Zero on success, or a non-zero error code on error.
   ///
-  virtual Status Scan(const std::string &table, const std::string &key,
-                   int record_count, const std::vector<std::string> *fields,
-                   std::vector<std::vector<Field>> &result) = 0;
+  virtual Status Scan(const std::string &table, const uint64_t key, int len) = 0;
+
   ///
   /// Updates a record in the database.
   /// Field/value pairs in the specified vector are written to the record,
@@ -78,8 +76,8 @@ class DB {
   /// @param values A vector of field/value pairs to update in the record.
   /// @return Zero on success, a non-zero error code on error.
   ///
-  virtual Status Update(const std::string &table, const std::string &key,
-                     std::vector<Field> &values) = 0;
+  virtual Status Update(const std::string &table, const uint64_t key,
+                     const uint64_t value) = 0;
   ///
   /// Inserts a record into the database.
   /// Field/value pairs in the specified vector are written into the record.
@@ -89,8 +87,8 @@ class DB {
   /// @param values A vector of field/value pairs to insert in the record.
   /// @return Zero on success, a non-zero error code on error.
   ///
-  virtual Status Insert(const std::string &table, const std::string &key,
-                     std::vector<Field> &values) = 0;
+  virtual Status Insert(const std::string &table, const uint64_t key,
+                     const uint64_t values) = 0;
   ///
   /// Deletes a record from the database.
   ///
@@ -98,13 +96,81 @@ class DB {
   /// @param key The key of the record to delete.
   /// @return Zero on success, a non-zero error code on error.
   ///
-  virtual Status Delete(const std::string &table, const std::string &key) = 0;
+  virtual Status Delete(const std::string &table, const uint64_t key) = 0;
 
   virtual ~DB() { }
 
   void SetProps(utils::Properties *props) {
     props_ = props;
   }
+
+  /* added to evaluated datastructures */
+  
+  /* the datastructure pointer */
+  void*       libhandle = nullptr;
+  void*       generic_structure = nullptr;
+  std::string libpath;
+
+  void*       (*ds_init)();
+  int         (*ds_insert)(void*, uint64_t, uint64_t);
+  int         (*ds_update)(void*, uint64_t, uint64_t);
+  int         (*ds_remove)(void*, uint64_t);
+  int         (*ds_read)(void*, uint64_t);
+  int         (*ds_read_range)(void*, uint64_t, uint64_t);
+
+  /* initialize the datastructure */
+  const std::string LIB_PATH    = "libpath";
+  
+  int load_functions() {
+    /* load the proper functions from the library */
+    this->libpath   = this->props_->GetProperty(LIB_PATH, "none");
+    this->libhandle = dlopen(this->libpath.c_str(), RTLD_LAZY);
+    if (this->libhandle == nullptr) {
+      std::cerr << "unable to load the library " << this->libpath  << "reason: " << dlerror() << std::endl;
+      return 1;
+    }
+
+    /* load the functions */
+    this->ds_init   = (void* (*)())dlsym(this->libhandle,  "ds_init");
+    if (this->ds_init == nullptr) {
+      std::cerr << "unable to load the function ds_init from the library " << this->libpath << std::endl;
+      return 1;
+    }
+
+    this->ds_insert = (int (*)(void*, uint64_t, uint64_t))dlsym(this->libhandle, "ds_insert");
+    if (this->ds_insert == nullptr) {
+      std::cerr << "unable to load the function ds_insert from the library " << this->libpath << std::endl;
+      return 1;
+    }
+
+    this->ds_update = (int (*)(void*, uint64_t, uint64_t))dlsym(this->libhandle, "ds_update");
+    if (this->ds_update == nullptr) {
+      std::cerr << "unable to load the function ds_update from the library " << this->libpath << std::endl;
+      return 1;
+    }
+
+    this->ds_remove = (int (*)(void*, uint64_t))dlsym(this->libhandle, "ds_remove");
+    if (this->ds_remove == nullptr) {
+      std::cerr << "unable to load the function ds_remove from the library " << this->libpath << std::endl;
+      return 1;
+    }
+    this->ds_read = (int (*)(void*, uint64_t))dlsym(this->libhandle, "ds_read");
+    if (this->ds_remove == nullptr) {
+      std::cerr << "unable to load the function ds_read from the library " << this->libpath << std::endl;
+      return 1;
+    }
+
+    this->ds_read_range = (int (*)(void*, uint64_t, uint64_t))dlsym(this->libhandle, "ds_read_range");
+    if (this->ds_remove == nullptr) {
+      std::cerr << "unable to load the function ds_read_range from the library " << this->libpath << std::endl;
+      return 1;
+    }
+
+    /* initialize the datastructure */
+    this->generic_structure = this->ds_init();
+    return 0;
+  }
+  
  protected:
   utils::Properties *props_;
 };

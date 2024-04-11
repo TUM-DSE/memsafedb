@@ -25,9 +25,11 @@ inline int ClientThread(ycsbc::DB *db, ycsbc::CoreWorkload *wl, const int num_op
 
   try {
     if (init_db) {
-      db->Init();
+      int result = db->Init();
+      if (result != 0) {
+        exit(1);
+      }
     }
-
     int ops = 0;
     for (int i = 0; i < num_ops; ++i) {
       if (rlim) {

@@ -198,7 +198,7 @@ class CoreWorkload {
 
  protected:
   static Generator<uint64_t> *GetFieldLenGenerator(const utils::Properties &p);
-  std::string BuildKeyName(uint64_t key_num);
+  uint64_t BuildKeyName(uint64_t key_num);
   void BuildValues(std::vector<DB::Field> &values);
   void BuildSingleValue(std::vector<DB::Field> &update);
 

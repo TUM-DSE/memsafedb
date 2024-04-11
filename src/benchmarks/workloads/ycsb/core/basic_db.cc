@@ -1,10 +1,8 @@
-//
-//  basic_db.cc
-//  YCSB-C
-//
-//  Created by Jinglei Ren on 12/17/14.
-//  Copyright (c) 2014 Jinglei Ren <jinglei@ren.systems>.
-//
+/*
+* @details: modified to evaluate the datastructures instead of databases.
+*
+* @author: Cristian Sandu <cristian.sandu@tum.de>
+*/
 
 #include "basic_db.h"
 #include "core/db_factory.h"
@@ -18,75 +16,56 @@ namespace ycsbc {
 
 std::mutex BasicDB:: mutex_;
 
-void BasicDB::Init() {
+int BasicDB::Init() {
+  /* initialize the datastructure */
   std::lock_guard<std::mutex> lock(mutex_);
-  if (props_->GetProperty(PROP_SILENT, PROP_SILENT_DEFAULT) == "true") {
-    out_ = new std::ofstream;
-    out_->setstate(std::ios_base::badbit);
-  } else {
-    out_ = &std::cout;
-  }
+
+
+  return 0;
 }
 
-DB::Status BasicDB::Read(const std::string &table, const std::string &key,
-                         const std::vector<std::string> *fields, std::vector<Field> &result) {
+DB::Status BasicDB::Read(const std::string &table, const uint64_t key) {
   std::lock_guard<std::mutex> lock(mutex_);
-  *out_ << "READ " << table << ' ' << key;
-  if (fields) {
-    *out_ << " [ ";
-    for (auto f : *fields) {
-      *out_ << f << ' ';
-    }
-    *out_ << ']' << std::endl;
-  } else {
-    *out_  << " < all fields >" << std::endl;
-  }
   return kOK;
 }
 
-DB::Status BasicDB::Scan(const std::string &table, const std::string &key, int len,
-                         const std::vector<std::string> *fields,
-                         std::vector<std::vector<Field>> &result) {
+DB::Status BasicDB::Scan(const std::string &table, const uint64_t key, int len) {
   std::lock_guard<std::mutex> lock(mutex_);
-  *out_ << "SCAN " << table << ' ' << key << " " << len;
-  if (fields) {
-    *out_ << " [ ";
-    for (auto f : *fields) {
-      *out_ << f << ' ';
-    }
-    *out_ << ']' << std::endl;
-  } else {
-    *out_  << " < all fields >" << std::endl;
+  int result = this->ds_read_range(this->generic_structure, key, len);
+  if (result == 0) {
+    return kOK;
   }
-  return kOK;
+  return kError;
 }
 
-DB::Status BasicDB::Update(const std::string &table, const std::string &key,
-                           std::vector<Field> &values) {
+DB::Status BasicDB::Update(const std::string &table, const uint64_t key,
+                           const uint64_t value) {
+  /* update is equivalent to insert */
   std::lock_guard<std::mutex> lock(mutex_);
-  *out_ << "UPDATE " << table << ' ' << key << " [ ";
-  for (auto v : values) {
-    *out_ << v.name << '=' << v.value << ' ';
+  int result = this->ds_update(this->generic_structure, key, value);
+  if (result == 0) {
+    return kOK;
   }
-  *out_ << ']' << std::endl;
-  return kOK;
+  return kError;
 }
 
-DB::Status BasicDB::Insert(const std::string &table, const std::string &key,
-                           std::vector<Field> &values) {
+DB::Status BasicDB::Insert(const std::string &table, const uint64_t key, uint64_t value) {
   std::lock_guard<std::mutex> lock(mutex_);
-  *out_ << "INSERT " << table << ' ' << key << " [ ";
-  for (auto v : values) {
-    *out_ << v.name << '=' << v.value << ' ';
+  int result = this->ds_insert(this->generic_structure, key, value);
+  if (result == 0) {
+    return kOK;
   }
-  *out_ << ']' << std::endl;
-  return kOK;
+  return kError;
 }
 
-DB::Status BasicDB::Delete(const std::string &table, const std::string &key) {
+DB::Status BasicDB::Delete(const std::string &table, uint64_t key) {
   std::lock_guard<std::mutex> lock(mutex_);
-  *out_ << "DELETE " << table << ' ' << key << std::endl;
-  return kOK;
+  int result = this->ds_remove(this->generic_structure, key);
+  if (result == 0) {
+    return kOK;
+  }
+  exit(1);
+  return kError;
 }
 
 DB *NewBasicDB() {

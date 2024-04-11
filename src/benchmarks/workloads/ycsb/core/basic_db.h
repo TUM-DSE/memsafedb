@@ -1,10 +1,8 @@
-//
-//  basic_db.h
-//  YCSB-C
-//
-//  Created by Jinglei Ren on 12/17/14.
-//  Copyright (c) 2014 Jinglei Ren <jinglei@ren.systems>.
-//
+/*
+* @details: modified to evaluate the datastructures instead of databases.
+*
+* @author: Cristian Sandu <cristian.sandu@tum.de>
+*/
 
 #ifndef YCSB_C_BASIC_DB_H_
 #define YCSB_C_BASIC_DB_H_
@@ -22,19 +20,17 @@ class BasicDB : public DB {
  public:
   BasicDB() : out_(nullptr) {}
 
-  void Init();
+  int Init();
 
-  Status Read(const std::string &table, const std::string &key,
-              const std::vector<std::string> *fields, std::vector<Field> &result);
+  Status Read  (const std::string &table, const uint64_t key);
 
-  Status Scan(const std::string &table, const std::string &key, int len,
-              const std::vector<std::string> *fields, std::vector<std::vector<Field>> &result);
+  Status Scan  (const std::string &table, const uint64_t key, int len);
 
-  Status Update(const std::string &table, const std::string &key, std::vector<Field> &values);
+  Status Update(const std::string &table, const uint64_t key, const uint64_t value);
 
-  Status Insert(const std::string &table, const std::string &key, std::vector<Field> &values);
+  Status Insert(const std::string &table, const uint64_t key, const uint64_t value);
 
-  Status Delete(const std::string &table, const std::string &key);
+  Status Delete(const std::string &table, const uint64_t key);
 
  private:
   static std::mutex mutex_;
