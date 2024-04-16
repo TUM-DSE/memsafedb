@@ -17,6 +17,8 @@
 #include <time.h>
 #include <fstream>
 #include <thread>
+#include <atomic>
+#include <random>
 
 void*       libhandle = nullptr;
 void*       generic_structure = nullptr;
@@ -33,92 +35,94 @@ uint64_t    (*ds_get_size)(void*);
 uint64_t            (*hash_fn)(uint64_t);
 
 /* parameters */
-std::vector<uint64_t> used_keys;
+std::vector<uint64_t> usedkeys;
 std::mutex            g_mutex;
 Barrier               tbarrier;
 
 /* data extracted from the program */
 LogFile logfilePerformance("");
-LogFile logfileMemory("");
 
+std::atomic<uint64_t> counter(0);
 uint64_t next_value() {
-    static uint64_t current_value = 0;
-    g_mutex.lock();
-    int result = current_value++;
-    g_mutex.unlock();
-    return result;
+    return std::atomic_fetch_add(&counter, 1ULL);
 }
 
 void dataset_performfill(const size_t thread_id, void* ds,
                          const double filling_factor, const uint64_t maximum_capacity) {
     const uint64_t capacity = filling_factor * maximum_capacity;
     uint64_t status = 0;
-    std::chrono::time_point<std::chrono::system_clock> start_time, end_time;
+    std::chrono::nanoseconds duration;
+    std::vector<uint64_t> _usedkeys;
+    std::vector<std::pair<uint64_t, uint64_t>> latencies;
 
     for (uint64_t i=0; i<capacity; i++) {
         const uint64_t key_num  = next_value();
         const uint64_t key      = hash_fn(key_num);
         const uint64_t value    = hash_fn(next_value());
 
-        MEASURE_TIME(ds_insert(ds, key, value),  start_time, end_time, status);
-        logfilePerformance.add_log("dataset_performfill", thread_id, key_num, key, value, status, start_time, end_time);
-
-        g_mutex.lock();
-        uint64_t memory_usage = ds_get_size(ds);
-        logfileMemory.add_log_mem("dataset_performfill", thread_id, key_num, memory_usage);
-        used_keys.push_back(key_num);
-        g_mutex.unlock();
+        MEASURE_TIME(ds_insert(ds, key, value), duration);
+        latencies.push_back({key_num, duration.count()});
+        _usedkeys.push_back(key_num);
     }
+    g_mutex.lock();
+    logfilePerformance.add_log("dataset_performfill", latencies);
+    for(auto key_num:_usedkeys) {
+        usedkeys.push_back(key_num);
+    }
+    g_mutex.unlock();
 }
 
-void dataset_performqueries(const size_t thread_id, void* ds,
+void dataset_performquery(const size_t thread_id, void* ds,
                          const double query_factor, const double success_factor,
                          const uint64_t maximum_capacity) {
     const uint64_t capacity = query_factor * maximum_capacity,
                    success_capacity = success_factor * capacity;
-    uint64_t status = 0;
-    std::chrono::time_point<std::chrono::system_clock> start_time, end_time;    
+    /* random number */
+    struct drand48_data buffer;
+    srand48_r(time(NULL), &buffer);
+    double random_value;
+
+    std::chrono::nanoseconds duration;
+    std::vector<std::pair<uint64_t, uint64_t>> latencies; 
     for (uint64_t i=0; i<capacity; i++) {
         uint64_t key_num = 0;
+        uint64_t order = next_value();
         if (success_capacity > 0 && i % (capacity / success_capacity) == 0) {
-            g_mutex.lock();
-            key_num   = used_keys[rand() % used_keys.size()];
-            g_mutex.unlock();
+            drand48_r(&buffer, &random_value);
+            key_num   = usedkeys[static_cast<uint64_t>(random_value * usedkeys.size())];
         } else {
             key_num  = next_value();
         }
 
         const uint64_t key      = hash_fn(key_num);
-        MEASURE_TIME(ds_read(ds, key),  start_time, end_time, status);
-        logfilePerformance.add_log("dataset_performqueries", thread_id, key_num, key, 0, status, start_time, end_time);
+        MEASURE_TIME(ds_read(ds, key),  duration);
+        latencies.push_back({order, duration.count()});
     }
+    logfilePerformance.add_log("dataset_performquery", latencies);
 }
 
 void dataset_performdeletion(const size_t thread_id, void* ds,
                          const double deletion_factor, const double success_factor,
-                         const uint64_t maximum_capacity) {
+                         const uint64_t maximum_capacity, std::vector<uint64_t> rkeys) {
     const uint64_t capacity = deletion_factor * maximum_capacity,
                    success_capacity = success_factor * capacity;
-    uint64_t status = 0, success_count = 0;
-    std::chrono::time_point<std::chrono::system_clock> start_time, end_time;    
+    uint64_t status = 0, success_count = 0, rorder = 0;
+    std::chrono::nanoseconds duration;
+    std::vector<std::pair<uint64_t, uint64_t>> latencies; 
     for (uint64_t i=0; i<capacity; i++) {
         uint64_t key_num = 0;
+        uint64_t order = next_value();
         if (success_capacity > 0 && i % (capacity / success_capacity) == 0) {
-            g_mutex.lock();
-            uint64_t index_random = rand() % used_keys.size();
-            while(used_keys[index_random] == -1) { index_random = rand() % used_keys.size(); }
-
-            key_num   = used_keys[index_random];
-            used_keys[index_random] = -1;
-            g_mutex.unlock();
+            key_num   = rkeys[rorder++];
         } else {
             key_num  = next_value();
         }
         const uint64_t key      = hash_fn(key_num);
 
-        MEASURE_TIME(ds_remove(ds, key),  start_time, end_time, status);
-        logfilePerformance.add_log("dataset_performdeletion", thread_id, key_num, key, 0, status, start_time, end_time);
+        MEASURE_TIME(ds_remove(ds, key), duration);
+        latencies.push_back({order, duration.count()});
     }
+    logfilePerformance.add_log("dataset_performdeletion", latencies);
 }
 
 void benchmark_threads(const uint64_t threadid, nlohmann::json config_data, const uint64_t num_threads,
@@ -139,12 +143,24 @@ void benchmark_threads(const uint64_t threadid, nlohmann::json config_data, cons
 
     const double  query_factor   = config_data["performquery"]["query_factor"];
     double  success_factor = config_data["performquery"]["success_factor"];
-    dataset_performqueries(threadid, ds, query_factor, success_factor, thread_capacity);
+    dataset_performquery(threadid, ds, query_factor, success_factor, thread_capacity);
     tbarrier.wait();
 
     const double  deletion_factor = config_data["performdeletion"]["deletion_factor"];
     success_factor  = config_data["performdeletion"]["success_factor"];
-    dataset_performdeletion(threadid, ds, deletion_factor, success_factor, thread_capacity);
+
+    /* prepare the keys to remove*/
+    g_mutex.lock();
+    std::vector<uint64_t> rkey;
+    for(int i=0; i<deletion_factor * thread_capacity; i++) {
+        uint64_t index_random = rand() % usedkeys.size();
+        while(usedkeys[index_random] == -1) { index_random = rand() % usedkeys.size(); }
+
+        rkey.push_back(index_random);
+    }
+    g_mutex.unlock();
+    tbarrier.wait();
+    dataset_performdeletion(threadid, ds, deletion_factor, success_factor, thread_capacity, rkey);
 }
 
 int main(int argc, char *argv[]) {
@@ -159,7 +175,6 @@ int main(int argc, char *argv[]) {
     std::ifstream f(argv[2]);
     nlohmann::json config_data = nlohmann::json::parse(f);
     logfilePerformance.set_name(std::string(argv[3]) + "_performance.out");
-    logfileMemory.set_name(std::string(argv[3]) + "_memory.out");
 
     const uint64_t num_threads = config_data["threadnum"];
     if (std::thread::hardware_concurrency() < num_threads) {
@@ -192,6 +207,5 @@ int main(int argc, char *argv[]) {
     EXECUTE_PARALLEL(num_threads, benchmark_threads, config_data, num_threads, ds, capacity);
 
     logfilePerformance.save_logfile();
-    logfileMemory.save_logfile();
     return 0;
 }

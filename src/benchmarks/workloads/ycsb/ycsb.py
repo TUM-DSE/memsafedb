@@ -4,6 +4,7 @@
 """
 from collections import defaultdict
 import tempfile, os, subprocess, json, os
+from src.benchmarks.benchmarks import IBenchmarks
 
 class YCSB(object):
     NAME_EXECUTABLE  = f'{os.path.dirname(os.path.abspath(__file__))}/ycsb'
@@ -11,6 +12,9 @@ class YCSB(object):
     def __init__(self, config: dict):
         self.__config = config
     
+    def perform_benchmark(self, libso_path: str, output_path: str):
+        print(libso_path, output_path)
+        
     def __perform_workload(self, libso_path: str, config_path: str, workload: str):
         process_args = [YCSB.NAME_EXECUTABLE, '-P', f'{config_path}', '-run']
         if self.__config['phase_load']: process_args += ['-load']

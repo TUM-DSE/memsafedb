@@ -13,15 +13,15 @@
 #include <chrono>
 #include <condition_variable>
 
-#define MEASURE_TIME(func, start_time, end_time, retval) {      \
-    try {                                                       \
-        start_time = std::chrono::system_clock::now();          \
-        retval = func;                                          \
-        end_time   = std::chrono::system_clock::now();          \
-    } catch (...) {                                             \
-        end_time   = std::chrono::system_clock::now();          \
-        retval     = -1;                                        \
-    }                                                           \
+#define MEASURE_TIME(func, duration) {                                  \
+    std::chrono::time_point<std::chrono::system_clock> start_time;      \
+    try {                                                               \
+        start_time = std::chrono::system_clock::now();                  \
+        func;                                                           \
+        duration   = std::chrono::system_clock::now() - start_time;     \
+    } catch (...) {                                                     \
+        duration   = std::chrono::system_clock::now() - start_time;     \
+    }                                                                   \
 }
 
 #define EXECUTE_PARALLEL(threadnum, func, ...) {            \
@@ -52,11 +52,7 @@ uint64_t initialize(std::string libpath);
 class LogFile {
 public:
     LogFile(std::string log_name);
-    void add_log(std::string function_name, uint64_t thread_id, uint64_t key_num,
-        uint64_t key, uint64_t value, uint64_t status,
-        std::chrono::time_point<std::chrono::system_clock> start_time, 
-        std::chrono::time_point<std::chrono::system_clock> end_time);
-    void add_log_mem(std::string function_name, uint64_t thread_id, uint64_t key_num, uint64_t memory_usage);
+    void add_log(std::string, std::vector<std::pair<uint64_t, uint64_t>>);
     void save_logfile();
     void set_name(std::string log_name) { this->log_name = log_name; }
 private:
@@ -79,7 +75,7 @@ public:
         if (count % num_threads == 0) {
             cv.notify_all();
         } else {
-            cv.wait(lock, [this] { return count % num_threads == 0; });
+            cv.wait(lock);
         }
     }
 
@@ -87,5 +83,5 @@ private:
     std::mutex mtx;
     std::condition_variable cv;
     std::uint64_t num_threads;
-    std::uint64_t count;
+    volatile std::uint64_t count;
 };

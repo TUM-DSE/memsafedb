@@ -61,36 +61,15 @@ LogFile::LogFile(std::string log_name) {
   this->log_name = log_name;
 }
 
-void LogFile::add_log(std::string function_name, uint64_t thread_id, uint64_t key_num,
-        uint64_t key, uint64_t value, uint64_t status,
-        std::chrono::time_point<std::chrono::system_clock> start_time, 
-        std::chrono::time_point<std::chrono::system_clock> end_time) {
-  std::ostringstream log_entry;
-  
-  auto dstart_time = start_time.time_since_epoch();
-  auto dend_time   = end_time.time_since_epoch();
+void LogFile::add_log(std::string function_name,
+        std::vector<std::pair<uint64_t, uint64_t>> durations) {
 
   g_mutex.lock();
-  log_entry << function_name
-            << " " << thread_id
-            << " " << key_num
-            << " " << key
-            << " " << value
-            << " " << status
-            << " " << std::chrono::duration_cast<std::chrono::nanoseconds>(dstart_time).count()
-            << " " << std::chrono::duration_cast<std::chrono::nanoseconds>(dend_time).count();
+  for (int i=0; i<durations.size(); i++) {
+    std::ostringstream log_entry;
+    log_entry << function_name << " " << durations[i].first << " " << durations[i].second;
     this->latency_logs.push_back(log_entry.str());
-    g_mutex.unlock();
-}
-
-void LogFile::add_log_mem(std::string function_name, uint64_t thread_id, uint64_t key_num, uint64_t memory_usage) {
-  std::ostringstream log_entry;
-  g_mutex.lock();
-  log_entry << function_name
-            << " " << thread_id
-            << " " << key_num
-            << " " << memory_usage;
-  this->latency_logs.push_back(log_entry.str());
+  }
   g_mutex.unlock();
 }
 

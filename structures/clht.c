@@ -14,10 +14,18 @@
 #include <stdio.h>
 
 void*   ds_init(uint64_t size) {
+#ifdef CLHT_LB
     uint64_t buckets = size / ENTRIES_PER_BUCKET;
     if (buckets >= MAXIMUM_BUCKET_NUM) {
         buckets = MAXIMUM_BUCKET_NUM;
     }
+#elif CLHT_LF
+    uint64_t buckets = size;
+    printf("num. buckets: %d\n", buckets);
+    if (buckets >= MAXIMUM_BUCKET_NUM) {
+        buckets = MAXIMUM_BUCKET_NUM;
+    }
+#endif
 
     void* hashtable = clht_create(buckets);
     assert(hashtable != NULL);

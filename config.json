@@ -2,87 +2,42 @@
     "target": {
         "__comment": "which datastructures will be evaluated",
 
-        "__clht_lb": "./structures/clht_lb.so",
+        "clht_lb": "./structures/clht_lb.so",
+        "clht_lf": "./structures/clht_lf.so",
+        "clht_lf_res": "./structures/clht_lf_res.so",
         "cuckoo": "./structures/cuckoo.so"
     },
-    "mbench_1": {
-        "__comment": "the threadnum should be a list [] - usecases",
-        "threadnum": [1, 2, 4],
-        "capacity": 100000,
-        "repetitions": 5,
-        "perf": {
-            "do_profiling": true,
-            "repetitions": 1
-        },
+    "benchmarks": {
+        "normal_benchmark": {
+            "benchmark": "MBench_1",
+            "target": [
+                "clht_lb", "cuckoo"
+            ],
 
-        "granularity": 25,
-        "output_path": "output/mbench_1",
-    
-        "__distribution_types": "[uniform, zipfian]",
-        "distribution": "zipfian",
-    
-        "performfill": {
-            "filling_factor": 0.95
-        },
-    
-        "performquery": {
-            "query_factor":   0.7,
-            "success_factor": 0.5
-        },
-    
-        "performdeletion": {
-            "deletion_factor":  0.7,
-            "success_factor":   0.5
-        }
-    },
-    "ycsb": {
-        "repetitions": 5,
-        "output_path": "output/ycsb",
-
-        "__comment": "to execute load phase before each workload",
-        "phase_load": true,
-
-        "workloads": {
-            "workloada": {
-                "recordcount": 1000000,
-                "operationcount": 1000000,
-                "workload": "com.yahoo.ycsb.workloads.CoreWorkload",
-    
-                "readallfields": true,
-    
-                "readproportion": 0.95,
-                "updateproportion": 0.05,
-                "scanproportion": 0,
-                "insertproportion": 0,
-                "requestdistribution": "zipfian"
+            "__comment": "the threadnum should be a list [] - usecases",
+            "threadnum": [1, 2, 4],
+            "capacity": 100,
+            "repetitions": 5,
+            "perf": {
+                "do_profiling": true,
+                "events": "branch-misses,cache-misses,page-faults"
             },
-            "workloadb": {
-                "recordcount": 1000000,
-                "operationcount": 1000000,
-                "workload": "com.yahoo.ycsb.workloads.CoreWorkload",
-
-                "readallfields": true,
-
-                "readproportion": 0.95,
-                "updateproportion": 0.05,
-                "scanproportion": 0,
-                "insertproportion": 0,
-
-                "requestdistribution": "zipfian"
+            
+            "__distribution_types": "[uniform, zipfian]",
+            "distribution": "zipfian",
+        
+            "performfill": {
+                "filling_factor": 0.95
             },
-            "workloadc": {
-                "recordcount": 1000000,
-                "operationcount": 1000000,
-                "workload": "com.yahoo.ycsb.workloads.CoreWorkload",
-
-                "readallfields": true,
-
-                "readproportion": 1,
-                "updateproportion": 0,
-                "scanproportion": 0,
-                "insertproportion": 0,
-
-                "requestdistribution": "zipfian"
+        
+            "performquery": {
+                "query_factor":   0.7,
+                "success_factor": 0.5
+            },
+        
+            "performdeletion": {
+                "deletion_factor":  0.7,
+                "success_factor":   0.5
             }
         }
     }

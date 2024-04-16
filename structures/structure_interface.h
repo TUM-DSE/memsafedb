@@ -14,7 +14,7 @@
 #define SUCCESS     0
 #define FAIL        1
 
-#define MAXIMUM_BUCKET_NUM 1024
+#define MAXIMUM_BUCKET_NUM 1000000
 
 #ifdef __cplusplus
 extern "C" {
