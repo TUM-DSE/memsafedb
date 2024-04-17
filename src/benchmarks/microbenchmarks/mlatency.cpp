@@ -47,6 +47,13 @@ uint64_t next_value() {
     return std::atomic_fetch_add(&counter, 1ULL);
 }
 
+/* workaround for perforator */
+extern "C" {
+    int _ds_insert(void* ds, uint64_t key, uint64_t value) { return ds_insert(ds, key, value); }
+    int _ds_read(void* ds, uint64_t key) {  return ds_read(ds, key); }
+    int _ds_remove(void* ds, uint64_t key) { return ds_remove(ds, key); }
+}
+
 void dataset_performfill(const size_t thread_id, void* ds,
                          const double filling_factor, const uint64_t maximum_capacity) {
     const uint64_t capacity = filling_factor * maximum_capacity;
@@ -60,7 +67,7 @@ void dataset_performfill(const size_t thread_id, void* ds,
         const uint64_t key      = hash_fn(key_num);
         const uint64_t value    = hash_fn(next_value());
 
-        MEASURE_TIME(ds_insert(ds, key, value), duration);
+        MEASURE_TIME(_ds_insert(ds, key, value), duration);
         latencies.push_back({key_num, duration.count()});
         _usedkeys.push_back(key_num);
     }
@@ -95,7 +102,7 @@ void dataset_performquery(const size_t thread_id, void* ds,
         }
 
         const uint64_t key      = hash_fn(key_num);
-        MEASURE_TIME(ds_read(ds, key),  duration);
+        MEASURE_TIME(_ds_read(ds, key),  duration);
         latencies.push_back({order, duration.count()});
     }
     logfilePerformance.add_log("dataset_performquery", latencies);
@@ -119,7 +126,7 @@ void dataset_performdeletion(const size_t thread_id, void* ds,
         }
         const uint64_t key      = hash_fn(key_num);
 
-        MEASURE_TIME(ds_remove(ds, key), duration);
+        MEASURE_TIME(_ds_remove(ds, key), duration);
         latencies.push_back({order, duration.count()});
     }
     logfilePerformance.add_log("dataset_performdeletion", latencies);

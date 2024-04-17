@@ -12,7 +12,7 @@ class YCSB(object):
     def __init__(self, config: dict):
         self.__config = config
     
-    def perform_benchmark(self, libso_path: str, output_path: str):
+    def perform_perf(self, libso_path: str, output_path: str):
         print(libso_path, output_path)
         
     def __perform_workload(self, libso_path: str, config_path: str, workload: str):
@@ -31,9 +31,11 @@ class YCSB(object):
             'run_thoroughput': float(results[2].split(': ')[1])
         }
 
-    def perform_workload(self, libso_path: str):
+    def perform_benchmark(self, libso_path: str, output_path: str):
+        os.makedirs(output_path, exist_ok=True)
+
         with tempfile.NamedTemporaryFile(mode='w') as temp:     
-            self.__bresults = defaultdict(lambda: [])
+            bresults = defaultdict(lambda: [])
             for workload, config_workload in self.__config['workloads'].items():
                 for key, value in config_workload.items():
                     temp.write(f'{key}={value}\n')
@@ -42,17 +44,13 @@ class YCSB(object):
 
                 for _ in range(self.__config['repetitions']):
                     results = self.__perform_workload(libso_path=libso_path, config_path=temp.name, workload=workload)
-                    self.__bresults[workload].append(
+                    bresults[workload].append(
                         self.__extract_results(results)
                     )
-                self.__bresults[workload] = {
-                    'run_runtime':      sum([x['run_runtime']     for x in self.__bresults[workload]]) / self.__config['repetitions'],
-                    'run_operations':   sum([x['run_operations']  for x in self.__bresults[workload]]) / self.__config['repetitions'],
-                    'run_thoroughput':  sum([x['run_thoroughput'] for x in self.__bresults[workload]]) / self.__config['repetitions']
+                bresults[workload] = {
+                    'run_runtime':      sum([x['run_runtime']     for x in bresults[workload]]) / self.__config['repetitions'],
+                    'run_operations':   sum([x['run_operations']  for x in bresults[workload]]) / self.__config['repetitions'],
+                    'run_thoroughput':  sum([x['run_thoroughput'] for x in bresults[workload]]) / self.__config['repetitions']
                 }
-
-    def save_results(self):
-        for workload in self.__config['workloads']:
-            outputpath = f'{self.__config["output_path"]}'
-            os.makedirs(outputpath, exist_ok=True)
-            json.dump(self.__bresults[workload], open(f'{outputpath}/{workload}.json', 'w'), indent=4)
+            
+        json.dump(bresults, open(f'{output_path}/workload.json', 'w'))

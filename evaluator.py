@@ -16,8 +16,8 @@ def perform_benchmarks(config: dict):
         bname, btargets = bconfig['benchmark'], bconfig['target']
         benchmark: IBenchmarks = eval(f'{bname}(config={bconfig})')
         for ntarget in btargets:
-            # benchmark.perform_benchmark(
-            #     libso_path=config['target'][ntarget], output_path=f'./output/{name}/{ntarget}')
+            benchmark.perform_benchmark(
+                libso_path=config['target'][ntarget], output_path=f'./output/{name}/{ntarget}')
             benchmark.perform_perf(
                 libso_path=config['target'][ntarget], output_path=f'./output/{name}/{ntarget}')
 

@@ -24,6 +24,7 @@ def plot_results(dir: str, config: dict):
             plotconfig = json.load(open(f'{cdir}/config.json', 'r'))
             plotter: IPlotter = eval(f'{plotconfig["benchmark"]}Plotter(config=config["{plotconfig["benchmark"]}"])')
             plotter.plot_results(config=plotconfig, dir=cdir)
+            plotter.evaluate_statics(config=plotconfig, dir=cdir)
 
 def main():
     args   = fetch_args()

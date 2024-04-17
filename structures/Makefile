@@ -5,11 +5,11 @@ CFLAGS = -fPIC -shared -pg -ggdb3 -fno-omit-frame-pointer
 
 # all binaries
 ALL =  libclht_gc libclht_lb libclht_lb.a clht_lb libclht_lf libclht_lf.a clht_lf \
-	   libclht_lf_res libclht_lf_res.a clht_lf_res cuckoo
+	   libclht_lf_res libclht_lf_res.a clht_lf_res cuckoo tbb hot
 all: $(ALL)
 
 # CLHT section
-CLHT_PATH 	 = /scratch/christian/cheridb/structures/CLHT
+CLHT_PATH 	 = ./CLHT
 CLHT_INCLUDE = -I$(CLHT_PATH)/include -I$(CLHT_PATH)/external/include
 CLHT_SRC 	 = $(CLHT_PATH)/src
 CLHT_LIBS 	 = -L$(CLHT_PATH)/external/ssmem -L. -lrt -lpthread -lm
@@ -63,11 +63,22 @@ cuckoo:
 
 
 # tbb section
-TBB_INCLUDE := -Ilibcuckoo
-TBB_PATH = /scratch/christian/cheridb/structures/libcuckoo
+TBB_PATH := ./oneTBB/build/build_out
+TBB_INCLUDE := -I$(TBB_PATH)/include
+TBB_LDLIBS = -L $(TBB_PATH)/lib64 -ltbb
 
-cuckoo:
-	$(GCC) $(CFLAGS) $(LIBCUCKOO_INCLUDE) cuckoo.cpp -o cuckoo.so
+tbb:
+	$(GCC) $(CFLAGS) $(TBB_INCLUDE) $(TBB_LDLIBS) tbb.cpp -o tbb.so 
+
+# hot section
+HOT_PATH := ./hot/libs
+HOT_INCLUDE := -I$(HOT_PATH)/hot/rowex/include -I$(HOT_PATH)/hot/commons/include -I$(HOT_PATH)/idx/content-helpers/include \
+				-I./hot/third-party/tbb/include
+HOT_LDLIBS = -L $(HOT_PATH)/lib64 -ltbb
+HOT_FLAGS = -mavx
+
+hot: hot.cpp
+	$(GCC) $(CFLAGS) $(HOT_INCLUDE) $(HOT_LDLIBS) hot.cpp -o hot.so $(HOT_FLAGS)
 
 clean:
 	rm -f *.so *.a *.o

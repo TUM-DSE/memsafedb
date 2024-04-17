@@ -8,10 +8,9 @@
 *
 *   @author: Cristian Sandu <cristian.sandu@tum.de>
 """
-import matplotlib.pyplot as plt
 from collections import defaultdict
 
-import subprocess, json, tempfile, os, time
+import subprocess, json, tempfile, os
 
 from ..benchmarks import IBenchmarks
 from ..utils import do_average
@@ -20,7 +19,8 @@ class MBench_1(IBenchmarks):
     NAME_EXECUTABLE_LAT  = f'{os.path.dirname(os.path.abspath(__file__))}/mlatency'
     NAME_EXECUTABLE_MEM  = f'{os.path.dirname(os.path.abspath(__file__))}/mmemory'
     RESULT_FILE_NAME = 'generic_output'
-    PERF_RESULT      = 'perf_data.out'
+    NULL_PATH        = '/dev/null'
+    PERFORATOR_PATH  = 'src/perf/perforator/perforator'
 
     def __init__(self, config: dict):
         self.__config     = config
@@ -44,7 +44,6 @@ class MBench_1(IBenchmarks):
         return data 
 
     def __perform_bechmark(self, libso_path: str, config_path: str):
-        print(' '.join([MBench_1.NAME_EXECUTABLE_LAT, libso_path, config_path, MBench_1.RESULT_FILE_NAME]))
         process = subprocess.Popen([MBench_1.NAME_EXECUTABLE_LAT, libso_path, config_path, MBench_1.RESULT_FILE_NAME])
         exit_code = process.wait()
         if exit_code != 0: raise Exception(f'MBench_1 filed during execution, exit-code: {exit_code}')
@@ -88,22 +87,55 @@ class MBench_1(IBenchmarks):
         temp.flush()
         tmemory = self.__perform_memoryusage(libso_path=libso_path, config_path=temp.name)
         json.dump(tmemory, open(f'{output_path}/memory.out', 'w'))
+    
+    def __parse_utrace(self, output: str):
+        data = []
+        for line in output.split('\n')[3:]:
+            if '|' not in line: continue
+            functname, instr, branchinstr, branchmiss, cacheref, cachemiss, timeelapsed = line[1:-1].split('|')
+            data.append({
+                'region':               functname.strip(),
+                'instructions':         int(instr.strip()),
+                'branch-instructions':  int(branchinstr.strip()),
+                'branch-misses':        int(branchmiss.strip()),
+                'cache-references':     int(cacheref.strip()),
+                'cache-misses':         int(cachemiss.strip())
+            })
+        return data
 
-    def __perform_perf(self, libso_path: str, config_path: str) -> dict:
+    def __perform_utrace(self, libso_path: str, config_path: str) -> dict:
         """
             Perform the perf_profilling over self.perform_benchmark. The execution
             is slow
         """
-        process = subprocess.Popen(['sudo', 'perf', 'record', '-ag', '-e branch-misses,cache-misses,page-faults', 
-                                    MBench_1.NAME_EXECUTABLE_LAT, libso_path, config_path, MBench_1.RESULT_FILE_NAME])
-        exit_code = process.wait()
-        if exit_code != 0: raise Exception(f'MBench_1 filed during execution, exit-code: {exit_code}')
+        process = subprocess.run(
+            [MBench_1.PERFORATOR_PATH, '--summary', '-r', '_ds_insert', '-r', '_ds_read', '-r', '_ds_remove',
+                MBench_1.NAME_EXECUTABLE_LAT, libso_path, config_path, MBench_1.RESULT_FILE_NAME], stdout=subprocess.PIPE)
+        if process.returncode != 0:
+            # TODO: possible error, check it
+            # raise Exception(f'{MBench_1.PERFORATOR_PATH} filed during execution, exit-code: {process.returncode}')
+            return None
+        result = self.__parse_utrace(process.stdout.decode())
+        return result
 
-        process = subprocess.Popen(['perf', 'data', 'convert','--force', '--to-json', MBench_1.PERF_RESULT])
-        exit_code = process.wait()
-        if exit_code != 0: raise Exception(f'MBench_1 filed during execution, exit-code: {exit_code}')
+    def __parse_perf(self, output: str):
+        data = {}
+        for line in output.split('\n'):
+            for keyword in ['instructions', 'branches', 'branch-misses', 'cache-misses', 'cache-references']:
+                if keyword not in line: continue
+                line = line.strip()
+                value, keyword = line.split('      ')[:2]
+                value = int(value.strip().replace(',', ''))
+                data[keyword] = value
+        return data
 
-        return json.load(open(MBench_1.PERF_RESULT, 'r'))
+    def __perform_perf(self, libso_path: str, config_path: str) -> dict:
+        process = subprocess.run(['perf', 'stat', '-a', '-e', 'instructions,branches,branch-misses,cache-misses,cache-references',
+                                  '-o', MBench_1.RESULT_FILE_NAME, MBench_1.NAME_EXECUTABLE_LAT, libso_path, config_path,
+                                  MBench_1.NULL_PATH], stdout=subprocess.PIPE)
+        result = self.__parse_perf(open(MBench_1.RESULT_FILE_NAME).read())
+        if process.returncode != 0: raise Exception(f'MBench_1 filed during execution, exit-code: {process.returncode}')
+        return result
 
     def perform_perf(self, libso_path: str, output_path: str):
         """
@@ -117,7 +149,17 @@ class MBench_1(IBenchmarks):
         })
         json.dump(config, temp)
         temp.flush()
-        presults, mresults = [], []
-        for _ in range(self.__config['repetitions']):
-            performance = self.__perform_perf(libso_path=libso_path, config_path=temp.name)
-            print(performance)
+        
+        utrace = self.__perform_utrace(libso_path=libso_path, config_path=temp.name)
+        json.dump(utrace, open(f'{output_path}/utrace.out', 'w'))
+
+        tperf = {}
+        for threadnum in self.__config['threadnum']:
+            temp = tempfile.NamedTemporaryFile(mode='w')
+            config.update({
+                'threadnum': threadnum
+            })
+            json.dump(config, temp)
+            temp.flush()
+            tperf[threadnum] = self.__perform_perf(libso_path=libso_path, config_path=temp.name)
+        json.dump(tperf, open(f'{output_path}/perf.out', 'w'))
