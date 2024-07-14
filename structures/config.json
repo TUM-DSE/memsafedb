@@ -13,12 +13,12 @@
         "normal_benchmark": {
             "benchmark": "MBench",
             "target": [
-                "cuckoo"
+                "clht_lf"
             ],
 
             "__comment": "the threadnum should be a list [] - usecases",
             "threadnum": [1, 2, 4],
-            "capacity": 100000,
+            "capacity": 1024,
             "repetitions": 5,
             "perf": {
                 "do_profiling": false,
@@ -45,7 +45,7 @@
         "normal_ycsb": {
             "benchmark": "YCSB",
             "target": [
-                
+                "cuckoo"
             ],
             
             "repetitions": 5,

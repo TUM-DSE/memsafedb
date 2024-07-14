@@ -1,0 +1,56 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 9ea13f8..1b4a0c9 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -3,11 +3,17 @@ project(libcuckoo
+     VERSION 0.3.1
+     LANGUAGES C CXX)
+ 
+-# put these in the cache so they show up in ccmake
+-option (BUILD_EXAMPLES "build example libcuckoo programs")
++# ptarget_link_libraries(unit_tests stdc++fs)
++set(CMAKE_CXX_STANDARD_LIBRARIES "-lstdc++ ${CMAKE_CXX_STANDARD_LIBRARIES}")
++
++set(CMAKE_C_COMPILER "clang-morello")
++set(CMAKE_CXX_COMPILER "clang-morello")
++
++set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=morello -mabi=purecap -Xclang -morello-vararg=new")
+ 
+ # Add the libcuckoo interface target
+ add_subdirectory(libcuckoo)
++target_link_libraries(${PROJECT_NAME} INTERFACE m)
+ 
+ # Add C interface target
+ add_subdirectory(libcuckoo-c)
+diff --git a/libcuckoo/CMakeLists.txt b/libcuckoo/CMakeLists.txt
+index 5ec8902..e02d813 100644
+--- a/libcuckoo/CMakeLists.txt
++++ b/libcuckoo/CMakeLists.txt
+@@ -30,6 +30,10 @@ target_link_libraries(libcuckoo INTERFACE Threads::Threads)
+ # cmake packaging
+ set (libcuckoo_pkgloc "share/cmake/libcuckoo")
+ 
++# capabilities cheri
++set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=morello -mabi=purecap -Xclang -morello-vararg=new")
++
++
+ write_basic_package_version_file(
+     "libcuckoo-config-version.cmake" VERSION ${libcuckoo_VERSION}
+     COMPATIBILITY AnyNewerVersion)
+diff --git a/tests/unit-tests/CMakeLists.txt b/tests/unit-tests/CMakeLists.txt
+index 0068df4..24f88e4 100644
+--- a/tests/unit-tests/CMakeLists.txt
++++ b/tests/unit-tests/CMakeLists.txt
+@@ -26,4 +26,6 @@ target_link_libraries(unit_tests
+     PRIVATE int_int_table
+ )
+ 
++set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -lstdc++")
++
+ add_test(NAME unit_tests COMMAND unit_tests)
+diff --git a/tests/unit-tests/unit_test_util.cc b/tests/unit-tests/unit_test_util.cc
+old mode 100644
+new mode 100755
+diff --git a/tests/unit-tests/unit_test_util.hh b/tests/unit-tests/unit_test_util.hh
+old mode 100644
+new mode 100755

@@ -23,6 +23,9 @@ void*   ds_init(uint64_t size) {
     * slots to store items
     */
     uint64_t buckets = size / libcuckoo::DEFAULT_SLOT_PER_BUCKET;
+
+    /* limit size */
+    if (buckets > 250000) { buckets = 250000; }
     return static_cast<void*>(new libcuckoo::cuckoohash_map<uint64_t, uint64_t>(buckets));
 }
 

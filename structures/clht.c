@@ -4,6 +4,9 @@
 
 #include "structure_interface.h"
 
+/* very important ! */
+/* use just sized over 1024 to work */
+
 /* select which version to use */
 #ifdef CLHT_LB
     #include <clht_lb.h>
@@ -14,18 +17,13 @@
 #include <stdio.h>
 
 void*   ds_init(uint64_t size) {
-#ifdef CLHT_LB
     uint64_t buckets = size / ENTRIES_PER_BUCKET;
-    if (buckets >= MAXIMUM_BUCKET_NUM) {
-        buckets = MAXIMUM_BUCKET_NUM;
-    }
-#elif CLHT_LF
-    uint64_t buckets = size;
-    printf("num. buckets: %d\n", buckets);
-    if (buckets >= MAXIMUM_BUCKET_NUM) {
-        buckets = MAXIMUM_BUCKET_NUM;
-    }
+#if CLHT_LF
+    buckets = size;
 #endif
+    if (buckets >= MAXIMUM_BUCKET_NUM) {
+        buckets = MAXIMUM_BUCKET_NUM;
+    }
 
     void* hashtable = clht_create(buckets);
     assert(hashtable != NULL);

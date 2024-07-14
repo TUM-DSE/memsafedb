@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import argparse, json
-from src.benchmarks import *
+from src.benchmarks import MBench, YCSB, IBenchmarks
 
 def fetch_args():
     parser = argparse.ArgumentParser()
@@ -18,8 +18,9 @@ def perform_benchmarks(config: dict):
         for ntarget in btargets:
             benchmark.perform_benchmark(
                 libso_path=config['target'][ntarget], output_path=f'./output/{name}/{ntarget}')
-            benchmark.perform_perf(
-                libso_path=config['target'][ntarget], output_path=f'./output/{name}/{ntarget}')
+            if bconfig['perf']['do_profiling']:
+                benchmark.perform_perf(
+                    libso_path=config['target'][ntarget], output_path=f'./output/{name}/{ntarget}')
 
 def main():
     args   = fetch_args()

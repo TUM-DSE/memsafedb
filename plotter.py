@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import argparse, os, json
-from src.benchmarks import *
+from src.plotters import *
 
 def fetch_args():
     parser = argparse.ArgumentParser()

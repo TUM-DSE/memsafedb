@@ -3,7 +3,7 @@
 *   @details: Used to generate the corresponding plots.
 *   @author: Cristian Sandu <cristian.sandu@tum.de>
 """
-from ..plotters import IPlotter
+from .IPlotter import IPlotter
 
 from collections import defaultdict
 import seaborn as sns
@@ -11,8 +11,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import json
+import os
 
-class MBench_1Plotter(IPlotter):
+class MBenchPlotter(IPlotter):
     def __init__(self, config: str):
         self.__config = config
     
@@ -22,7 +23,10 @@ class MBench_1Plotter(IPlotter):
         stdavg         = self.__config['stdavg']
 
         sns.set_theme()
-        _, axs = plt.subplots(1, 1, figsize=(12, 6), sharey=True)
+        fig, axs = plt.subplots(1, 1, figsize=(12, 6), sharey=True)
+        max_means = []
+        fsummary = open(f'{save_dir}/summary_{fname}.txt', 'w')
+
 
         for threadval in threadnum:
             dataset = log_latency[f'{threadval}'][fname]
@@ -36,18 +40,23 @@ class MBench_1Plotter(IPlotter):
 
             df = pd.DataFrame({'mean': means, 'std': stds})
             axis = [i * interval for i in range(granularity)]
-            axs.set_ylim(bottom=0, top=max(means))
-            axs.set_xlim(left=0, right=len(dataset))
+            max_means.append(max(means))
+
             axs.plot(axis, df['mean'], label=f"threads={threadval}")
             axs.fill_between(axis, df['mean'] - df['std'], df['mean'] + df['std'],
                              alpha=0.3)
+            fsummary.write(f'thread {threadval} - mean: {np.mean(means)}\n')
+
+        axs.set_ylim(bottom=0, top=max(max_means))
+        axs.set_xlim(left=0, right=len(dataset))
 
         plt.xlabel('num. op.')
         plt.ylabel('latency (ns)')
         plt.legend()  # Display the legend
         plt.title(f'Performance Evaluation {plotname}') 
         plt.savefig(f'{save_dir}/plot_{fname}.png')
-    
+        plt.close(fig)
+
     def __plot_memoryusage(self, plotconfig: dict, log_memory: dict, save_dir: str):
         granularity    = self.__config['granularity']
 
@@ -82,9 +91,9 @@ class MBench_1Plotter(IPlotter):
         json.dump(data, open(f'{dir}/utrace.json', 'w'))
 
     def evaluate_statics(self, config: dict, dir: str):
-        log_perf = json.load(open(f'{dir}/perf.out', 'r'))
-        log_utrace = json.load(open(f'{dir}/utrace.out', 'r'))
-        self.__evaluate_utrace(config, log_utrace, dir)
+        if os.path.isfile('{dir}/utrace.out'):
+            log_utrace = json.load(open(f'{dir}/utrace.out', 'r'))
+            self.__evaluate_utrace(config, log_utrace, dir)
 
     def plot_results(self, config: dict, dir: str):
         log_latency = json.load(open(f'{dir}/latency.out', 'r'))
