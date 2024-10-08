@@ -15,7 +15,7 @@ import subprocess, json, tempfile, os
 from ..benchmarks import IBenchmarks
 from ..utils import do_average
 
-class MBench_1(IBenchmarks):
+class MBench(IBenchmarks):
     NAME_EXECUTABLE_LAT  = f'{os.path.dirname(os.path.abspath(__file__))}/mlatency'
     NAME_EXECUTABLE_MEM  = f'{os.path.dirname(os.path.abspath(__file__))}/mmemory'
     RESULT_FILE_NAME = 'generic_output'
@@ -44,16 +44,23 @@ class MBench_1(IBenchmarks):
         return data 
 
     def __perform_bechmark(self, libso_path: str, config_path: str):
-        process = subprocess.Popen([MBench_1.NAME_EXECUTABLE_LAT, libso_path, config_path, MBench_1.RESULT_FILE_NAME])
-        exit_code = process.wait()
-        if exit_code != 0: raise Exception(f'MBench_1 filed during execution, exit-code: {exit_code}')
-        return self.__parse_results_performance(open(f'{MBench_1.RESULT_FILE_NAME}_performance.out', 'r').readlines())
+        process = subprocess.Popen([MBench.NAME_EXECUTABLE_LAT, libso_path, config_path, MBench.RESULT_FILE_NAME], stdout=subprocess.PIPE)
+        print(' '.join([MBench.NAME_EXECUTABLE_LAT, libso_path, config_path, MBench.RESULT_FILE_NAME]))
+        stdout, _ = process.communicate()
+        data = stdout.decode()
+        if data: print(data)    # debugging functionality
+        import time
+        if process.returncode != 0:
+            time.sleep(1000)
+            raise Exception(f'MBench failed during execution, exit-code: {process.returncode}')
+        
+        return self.__parse_results_performance(open(f'{MBench.RESULT_FILE_NAME}_performance.out', 'r').readlines())
 
     def __perform_memoryusage(self, libso_path: str, config_path: str):
-        process = subprocess.Popen([MBench_1.NAME_EXECUTABLE_MEM, libso_path, config_path, MBench_1.RESULT_FILE_NAME])
+        process = subprocess.Popen([MBench.NAME_EXECUTABLE_MEM, libso_path, config_path, MBench.RESULT_FILE_NAME])
         exit_code = process.wait()
-        if exit_code != 0: raise Exception(f'MBench_1 filed during execution, exit-code: {exit_code}')
-        return self.__parse_results_memory(open(f'{MBench_1.RESULT_FILE_NAME}_memory.out', 'r').readlines())
+        if exit_code != 0: raise Exception(f'MBench filed during execution, exit-code: {exit_code}')
+        return self.__parse_results_memory(open(f'{MBench.RESULT_FILE_NAME}_memory.out', 'r').readlines())
     
     def perform_benchmark(self, libso_path: str, output_path: str):
         os.makedirs(output_path, exist_ok=True)

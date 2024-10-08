@@ -3,29 +3,23 @@
 */
 
 #include "structure_interface.h"
+#include "clht.h"
 
-/* select which version to use */
-#ifdef CLHT_LB
-    #include <clht_lb.h>
-#elif CLHT_LF
-    #include <clht_lf.h>
-#endif
-
-#include <stdio.h>
+#define MEM_SIZE            8
+#define MAXIMUM_BUCKET_NUM  131072 /* power of 2 */
 
 void*   ds_init(uint64_t size) {
 #ifdef CLHT_LB
     uint64_t buckets = size / ENTRIES_PER_BUCKET;
-    if (buckets >= MAXIMUM_BUCKET_NUM) {
-        buckets = MAXIMUM_BUCKET_NUM;
-    }
 #elif CLHT_LF
+    assert((size & (size - 1)) == 0);
     uint64_t buckets = size;
-    printf("num. buckets: %d\n", buckets);
+    /* check if power of 2 */
+#endif
+
     if (buckets >= MAXIMUM_BUCKET_NUM) {
         buckets = MAXIMUM_BUCKET_NUM;
     }
-#endif
 
     void* hashtable = clht_create(buckets);
     assert(hashtable != NULL);
@@ -35,11 +29,11 @@ void*   ds_init(uint64_t size) {
 
 void ds_thread_init(void *ds) {
     /* some ds require thread initialization */
-    clht_gc_thread_init(ds, pthread_self());    
+    clht_gc_thread_init(ds, pthread_self());
 }
 
 int ds_insert(void* ds, uint64_t key, uint64_t value) {
-    if (clht_put(ds, key, value)) {
+    if (clht_put(ds, key, (clht_val_t) value)) {
         return SUCCESS;
     }
     return FAIL;

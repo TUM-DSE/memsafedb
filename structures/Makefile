@@ -27,19 +27,18 @@ libclht_lb.a: libclht_lb.o libclht_gc.o
 	ar -d libclht_lb.a *
 	ar -r libclht_lb.a libclht_lb.o libclht_gc.o
 
-
 clht_lb: libclht_lb.a
 	$(GCC) -DNO_RESIZE -DCLHT_LB $(CLHT_FLAGS) $(CLHT_INCLUDE) $(CURDIR)/libclht_lb.o $(CURDIR)/libclht_gc.o $(CLHT_BMARK) -o clht_lb.so $(CLHT_LIBS) -lclht_lb -lssmem
 
 libclht_lf:
 	$(GCC) $(CLHT_FLAGS) $(CLHT_INCLUDE) $(CLHT_SRC)/clht_lf.c -o libclht_lf.o
 
-libclht_lf.a: libclht_lf.o libclht_gc.o
+libclht_lf.a: libclht_lf libclht_gc
 	@echo Archive name = libclht_lf.a
 	ar -d libclht_lf.a *
 	ar -r libclht_lf.a libclht_lf.o libclht_gc.o
 
-clht_lf:
+clht_lf: libclht_lf.a
 	$(GCC) -DLOCKFREE -DCLHT_LF $(CLHT_FLAGS) $(CLHT_INCLUDE) $(CURDIR)/libclht_lf.o $(CURDIR)/libclht_gc.o $(CLHT_BMARK) -o clht_lf.so $(CLHT_LIBS) -lclht_lf -lssmem
 
 libclht_lf_res:

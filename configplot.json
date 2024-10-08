@@ -1,6 +1,6 @@
 {
-    "MBench_1": {
+    "MBench": {
         "granularity": 100,
-        "stdavg": 3
+        "stdavg": 1
     }
 }

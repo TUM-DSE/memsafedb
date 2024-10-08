@@ -65,7 +65,7 @@ void LogFile::add_log(std::string function_name,
         std::vector<std::pair<uint64_t, uint64_t>> durations) {
 
   g_mutex.lock();
-  for (int i=0; i<durations.size(); i++) {
+  for (size_t i=0; i<durations.size(); i++) {
     std::ostringstream log_entry;
     log_entry << function_name << " " << durations[i].first << " " << durations[i].second;
     this->latency_logs.push_back(log_entry.str());

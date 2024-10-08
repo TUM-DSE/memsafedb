@@ -1,0 +1,22 @@
+# designed by Cristian Sandu <cristian.sandu@tum.de>
+#
+# flags: DIFF_CPU_EXEC - each thread will be executed on a different CPU core
+
+GCC    = clang-morello
+CFLAGS = -lstdc++ -DDIFF_CPU_EXEC -march=morello -mabi=purecap -pthread -g
+
+
+INCLUDES := -Ijsonutility/include
+
+# all binaries
+ALL = 	mlatency mmemory
+all: $(ALL)
+
+mlatency: utils.cpp mlatency.cpp
+	$(GCC) $(CFLAGS) $(INCLUDES) utils.cpp mlatency.cpp -o mlatency
+
+mmemory: utils.cpp mmemory.cpp
+	$(GCC) $(CFLAGS) $(INCLUDES) utils.cpp mmemory.cpp -o mmemory
+
+clean:
+	rm -rf *.out mlatency mmemory

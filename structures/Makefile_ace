@@ -1,0 +1,98 @@
+# Designed by Cristian Sandu <cristian.sandu@tum.de>
+# Converted for clang-morello by Cristian Sandu
+
+# Morello-specific compiler and flags
+CC        = clang-morello
+CFLAGS    = -fpic -shared
+MORELLO_FLAGS = -march=morello -mabi=purecap -g -O0 -fpic -shared
+# linker flags
+LDFLAGS   = -Wl,-z,now -Wl,-z,relro
+
+# All binaries
+ALL =  libclht_gc libclht_lb libclht_lb.a clht_lb libclht_lf libclht_lf.a clht_lf \
+	   libclht_lf_res libclht_lf_res.a clht_lf_res cuckoo stdlib tbb
+all: $(ALL)
+
+# CLHT section
+CLHT_PATH     = ./CLHT
+CLHT_INCLUDE  = -I$(CLHT_PATH)/include -I$(CLHT_PATH)/external/include
+CLHT_SRC      = $(CLHT_PATH)/src
+CLHT_LIBS     = -L$(CLHT_PATH)/external/lib -L. -lrt -lpthread -lm
+CLHT_BMARK    = clht.c
+CLHT_FLAGS    = $(CFLAGS) $(MORELLO_FLAGS) -D_GNU_SOURCE -DADD_PADDING -DDEFAULT -O3
+
+libclht_gc:
+	$(CC) $(MORELLO_FLAGS) $(CLHT_INCLUDE) -o libclht_gc.o -c $(CLHT_SRC)/clht_gc.c 
+
+libclht_lb:
+	$(CC) $(CLHT_FLAGS) $(MORELLO_FLAGS) $(CLHT_INCLUDE) $(CLHT_SRC)/clht_lb.c -o libclht_lb.o
+
+libclht_lb.a: libclht_gc libclht_lb
+	@echo Archive name = libclht_lb.a
+	rm -f  libclht_lb.a
+	ar -r libclht_lb.a libclht_lb.o libclht_gc.o
+
+clht_lb: libclht_lb.a
+	$(CC) -DNO_RESIZE -DCLHT_LB $(CLHT_FLAGS) $(MORELLO_FLAGS) $(CLHT_INCLUDE) $(CURDIR)/libclht_lb.o $(CURDIR)/libclht_gc.o $(CLHT_BMARK) -o clht_lb.so $(CLHT_LIBS) -lclht_lb -lssmem
+
+libclht_lf:
+	$(CC) $(MORELLO_FLAGS) $(CLHT_INCLUDE) -o libclht_lf.o -c $(CLHT_SRC)/clht_lf.c
+
+libclht_lf.a: libclht_gc libclht_lf
+	@echo Archive name = libclht_lf.a
+	rm -f libclht_lf.a
+	ar -r libclht_lf.a libclht_lf.o libclht_gc.o
+
+clht_lf: libclht_lf.a
+	$(CC) -DLOCKFREE -DCLHT_LF $(MORELLO_FLAGS) $(CLHT_INCLUDE) $(CLHT_BMARK) -o clht_lf.so $(CLHT_LIBS) -lclht_lf -lssmem
+
+libclht_lf_res:
+	$(CC) $(CLHT_FLAGS) $(MORELLO_FLAGS) $(CLHT_INCLUDE) $(CLHT_SRC)/clht_lf_res.c -o libclht_lf_res.o
+
+libclht_lf_res.a: libclht_lf_res.o libclht_gc.o
+	@echo Archive name = libclht_lf.a
+	rm -f  libclht_lf.a
+	ar -r libclht_lf.a libclht_lf_res.o libclht_gc.o
+
+clht_lf_res:
+	$(CC) -DLOCKFREE_RES -DCLHT_LF $(CLHT_FLAGS) $(MORELLO_FLAGS) $(CLHT_INCLUDE) $(CURDIR)/libclht_lf_res.o $(CURDIR)/libclht_gc.o $(CLHT_BMARK) -o clht_lf_res.so $(CLHT_LIBS) -lclht_lf -lssmem
+
+
+# libcuckoo section
+LIBCUCKOO_INCLUDE := -Ilibcuckoo
+LIBCUCKOO_PATH = /scratch/christian/cheridb/structures/libcuckoo
+
+cuckoo:
+	   $(CC) $(CFLAGS) $(MORELLO_FLAGS) $(LIBCUCKOO_INCLUDE) cuckoo.cpp -o cuckoo.so $(LDFLAGS)
+
+
+# art section
+ART_PATH 	= -I./adaptive-radix-tree/include
+art:
+		$(CC) $(MORELLO_FLAGS) $(ART_PATH) art.cpp -o art.so
+
+# cuckootrie section
+CUCKOOTRIE_IPATH = -I./cuckoo-trie-code
+CUCKOOTRIE_PATH  = ./cuckoo-trie-code
+LIB_SOURCES = $(CUCKOOTRIE_PATH)/main.c $(CUCKOOTRIE_PATH)/util.c \
+			  $(CUCKOOTRIE_PATH)/verify_trie.c $(CUCKOOTRIE_PATH)/random.c \
+			  $(CUCKOOTRIE_PATH)/atomics.c $(CUCKOOTRIE_PATH)/mt_debug.c
+cuckootrie:
+	cp $(CUCKOOTRIE_PATH)/libcuckoo_trie.so .
+	$(CC) $(MORELLO_FLAGS) $(CUCKOOTRIE_IPATH) $(CUCKOOTRIE_FLAGS) -DNDEBUG cuckootrie.c -o cuckootrie.so $(LIB_SOURCES) -pthread
+
+
+stdlib:
+	$(CC) $(MORELLO_FLAGS) -lstdc++ stdlib.cpp -o stdlib.so
+
+
+# tbb section
+TBB_PATH := ./oneTBB
+TBB_INCLUDE := -I$(TBB_PATH)/include
+TBB_LDLIBS = -L $(TBB_PATH)/lib -ltbb
+
+tbb:
+	$(CC) $(MORELLO_FLAGS) $(TBB_INCLUDE) $(TBB_LDLIBS) tbb.cpp -o tbb.so 
+
+clean:
+	rm -f *.so *.a *.o

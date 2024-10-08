@@ -13,26 +13,26 @@
 #include <chrono>
 #include <condition_variable>
 
-#define MEASURE_TIME(func, duration) {                                  \
-    std::chrono::time_point<std::chrono::system_clock> start_time;      \
-    try {                                                               \
-        start_time = std::chrono::system_clock::now();                  \
-        func;                                                           \
-        duration   = std::chrono::system_clock::now() - start_time;     \
-    } catch (...) {                                                     \
-        duration   = std::chrono::system_clock::now() - start_time;     \
-    }                                                                   \
+#define MEASURE_TIME(func, duration) {                                              \
+    std::chrono::time_point<std::chrono::high_resolution_clock> start_time;         \
+    try {                                                                           \
+        start_time = std::chrono::high_resolution_clock::now();                     \
+        func;                                                                       \
+        duration   = std::chrono::high_resolution_clock::now() - start_time;        \
+    } catch (...) {                                                                 \
+        duration   = std::chrono::high_resolution_clock::now() - start_time;        \
+    }                                                                               \
 }
 
-#define EXECUTE_PARALLEL(threadnum, func, ...) {            \
-    std::vector<std::thread> threads;                       \
-    for (size_t i = 0; i < threadnum; i++) {                \
-        threads.emplace_back(func, i, ##__VA_ARGS__);       \
-    }                                                       \
-                                                            \
-    for (auto& thread : threads) {                          \
-        thread.join();                                      \
-    }                                                       \
+#define EXECUTE_PARALLEL(threadnum, func, ...) {                    \
+    std::vector<std::thread> threads;                               \
+    for (size_t i = 0; i < threadnum; i++) {                        \
+        threads.emplace_back(func, threadnum, i, ##__VA_ARGS__);    \
+    }                                                               \
+                                                                    \
+    for (auto& thread : threads) {                                  \
+        thread.join();                                              \
+    }                                                               \
 }
 
 /* the datastructure pointer */
