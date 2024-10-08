@@ -1,9 +1,9 @@
 [submodule "structures/CLHT"]
 	path = structures/CLHT
-	url = git@github.com:LPD-EPFL/CLHT.git
+	url = git@github.com:TUM-DSE/CHERI-CLHT.git
 [submodule "structures/cuckoo-trie-code"]
 	path = structures/cuckoo-trie-code
-	url = git@github.com:cuckoo-trie/cuckoo-trie-code.git
+	url = git@github.com:TUM-DSE/CHERI-cuckoo-trie-code.git
 [submodule "structures/libcuckoo"]
 	path = structures/libcuckoo
 	url = git@github.com:efficient/libcuckoo.git
@@ -12,10 +12,14 @@
 	url = git@github.com:speedskater/hot.git
 [submodule "structures/oneTBB"]
 	path = structures/oneTBB
-	url = git@github.com:oneapi-src/oneTBB.git
+	url = git@github.com:TUM-DSE/CHERI-oneTBB.git
 [submodule "src/benchmarks/microbenchmarks/jsonutility"]
 	path = src/benchmarks/microbenchmarks/jsonutility
 	url = git@github.com:nlohmann/json.git
 [submodule "src/perf/perforator"]
 	path = src/perf/perforator
 	url = git@github.com:zyedidia/perforator.git
+[submodule "structures/adaptive-radix-tree"]
+	path = structures/adaptive-radix-tree
+	url = git@github.com:TUM-DSE/CHERI-adaptive-radix-tree.git
+
