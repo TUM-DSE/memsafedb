@@ -72,6 +72,7 @@ extern "C" {
     }
 #endif
 
+
 void dataset_performfill(const size_t num_threads, const size_t thread_id, 
                          void* ds, const uint64_t capacity) {
     std::chrono::nanoseconds duration;
@@ -79,7 +80,7 @@ void dataset_performfill(const size_t num_threads, const size_t thread_id,
 
     for (uint64_t i=0; i<capacity; i++) {
         const uint64_t key_num  = i * num_threads + thread_id;
-        const uint64_t key      = hash_fn(key_num);
+        const uint64_t key      = hash_fn(key_num) % capacity;
         const uint64_t value    = hash_fn(key_num * key_num);   /* insert a random key */
 
     #ifdef __aarch64__
