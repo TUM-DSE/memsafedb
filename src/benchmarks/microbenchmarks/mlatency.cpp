@@ -55,6 +55,23 @@ extern "C" {
     int _ds_remove(void* ds, uint64_t key) { return ds_remove(ds, key); }
 }
 
+#ifdef __aarch64__
+    #define CNTFRQ_EL0 (*(volatile uint32_t*)0xE000E020)
+    #define CNTPCT_EL0 (*(volatile uint64_t*)0xE000E028)
+
+    uint32_t read_CNTFRQ(void) {
+        uint32_t freq;
+        asm volatile ("mrs %0, CNTFRQ_EL0" : "=r" (freq));
+        return freq;
+    }
+
+    uint64_t read_CNTPCT(void) {
+        uint64_t count;
+        asm volatile ("mrs %0, CNTPCT_EL0" : "=r" (count));
+        return count;
+    }
+#endif
+
 void dataset_performfill(const size_t num_threads, const size_t thread_id, 
                          void* ds, const uint64_t capacity) {
     std::chrono::nanoseconds duration;
@@ -65,10 +82,20 @@ void dataset_performfill(const size_t num_threads, const size_t thread_id,
         const uint64_t key      = hash_fn(key_num);
         const uint64_t value    = hash_fn(key_num * key_num);   /* insert a random key */
 
+    #ifdef __aarch64__
+        uint64_t startCycle = read_CNTPCT();
+        _ds_insert(ds, key, value);
+        uint64_t endCycle   = read_CNTPCT();
+    #else
         MEASURE_TIME(_ds_insert(ds, key, value), duration);
+    #endif
 
         std::chrono::nanoseconds order = std::chrono::high_resolution_clock::now() - gstart_time;
+    #ifdef __aarch64__
+        latencies.push_back({order.count(), endCycle - startCycle});
+    #else
         latencies.push_back({order.count(), duration.count()});
+    #endif
     }
     logfilePerformance.add_log("dataset_performfill", latencies);
 }
@@ -119,12 +146,10 @@ void benchmark_threads(const uint64_t num_threads, const uint64_t threadid,
 #ifdef DIFF_CPU_EXEC
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
-    CPU_SET(threadid, &cpuset);  // threadid is the desired CPU core index
+    CPU_SET(threadid, &cpuset);      // threadid is the desired CPU core index
 #if defined(__arm__) || defined(__aarch64__)
     int result = sched_setaffinity(0, sizeof(cpuset), &cpuset);
-    if (result != 0) {
-        perror("sched_setaffinity"); // Print error message if setting affinity fails
-    }
+    if (result != 0) { perror("sched_setaffinity"); }
 #else
     pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
 #endif
