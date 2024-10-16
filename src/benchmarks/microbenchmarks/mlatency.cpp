@@ -59,12 +59,6 @@ extern "C" {
     #define CNTFRQ_EL0 (*(volatile uint32_t*)0xE000E020)
     #define CNTPCT_EL0 (*(volatile uint64_t*)0xE000E028)
 
-    uint32_t read_CNTFRQ(void) {
-        uint32_t freq;
-        asm volatile ("mrs %0, CNTFRQ_EL0" : "=r" (freq));
-        return freq;
-    }
-
     uint64_t read_CNTPCT(void) {
         uint64_t count;
         asm volatile ("mrs %0, CNTPCT_EL0" : "=r" (count));
