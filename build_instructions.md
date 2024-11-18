@@ -54,4 +54,14 @@ Source the path to be used during evaluation. The TBB project provides the vars 
 
 !!!! TBB is a total nightmare. If something is not working, just shut down the SSH and re-establish the connection (some values get cached, stored / sessions).
 
+## Building structures
+
+In `structures`, run:
+
+```
+gmake -f Makefile_ace
+```
+
+## Other
+
 For debugging, just use the classical approach - adding the flags `-g -O0`. Do not build it in "DEBUG TYPE" (if you do, you will experience the worst nightmare in GDB.
