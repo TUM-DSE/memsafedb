@@ -27,7 +27,7 @@ You can run the tests `ssmem_test` to check if the lib works (it must work).
 
 Build CLHT directory
 ```
-  cd CLHT && gmake -f Makefile_ace
+  cd CLHT && gmake -f Makefile_ace clht_lb clht_lf
 ```
 
 Test CLHT:
