@@ -22,4 +22,7 @@
 [submodule "structures/adaptive-radix-tree"]
 	path = structures/adaptive-radix-tree
 	url = git@github.com:TUM-DSE/CHERI-adaptive-radix-tree.git
+[submodule "structures/google-btree"]
+	path = structures/google-btree
+	url = git@github.com:TUM-DSE/CHERI-Google-BTree.git
 
