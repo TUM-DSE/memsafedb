@@ -62,6 +62,12 @@ In `structures`, run:
 gmake -f Makefile_ace
 ```
 
+## Running benchmarks
+
+```
+python3 evaluator.py
+```
+
 ## Other
 
 For debugging, just use the classical approach - adding the flags `-g -O0`. Do not build it in "DEBUG TYPE" (if you do, you will experience the worst nightmare in GDB.
