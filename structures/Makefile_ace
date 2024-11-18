@@ -96,8 +96,9 @@ TBB_LDLIBS = -L$(TBB_PATH)/lib -ltbb
 tbb:
 	$(CC) $(MORELLO_FLAGS) $(TBB_INCLUDE) $(TBB_LDLIBS) tbb.cpp -o tbb.so 
 
+BTREE_PATH := -I./google-btree
 btree:
-	$(CC) $(MORELLO_FLAGS) btree.cpp -o btree.so
+	$(CC) $(BTREE_PATH) $(MORELLO_FLAGS) btree.cpp -o btree.so
 
 # art section
 ART_PATH        = -I./adaptive-radix-tree/include
