@@ -8,7 +8,7 @@ namespace ycsbc {
     DB::Status ExampleDB::Read(const std::string &table, const std::string &key,
                                const std::vector<std::string> *fields, std::vector<Field> &result) {
         // for the beginning we only do one key values, ignore for the first multiple fields associated with a key
-        assert(fields == null);
+        assert(fields == nullptr);
         assert(fields->size() == 1);
 
         auto e = this->map.find(key);
@@ -24,7 +24,7 @@ namespace ycsbc {
     DB::Status ExampleDB::Scan(const std::string &table, const std::string &key, int len,
                                const std::vector<std::string> *fields, std::vector<std::vector<Field>> &result) {
         // for the beginning we only do one key values, ignore for the first multiple fields associated with a key
-        assert(fields == null);
+        assert(fields == nullptr);
         assert(fields->size() == 1);
 
         return DB::Status::kOK;
@@ -32,27 +32,14 @@ namespace ycsbc {
 
 
     DB::Status ExampleDB::Update(const std::string &table, const std::string &key, std::vector<Field> &values) {
-        // for the beginning we only do one key values, ignore for the first multiple fields associated with a key
-        assert(fields == null);
-        assert(fields->size() == 1);
-
         return DB::Status::kOK;
     }
 
     DB::Status ExampleDB::Insert(const std::string &table, const std::string &key, std::vector<Field> &values) {
-        // for the beginning we only do one key values, ignore for the first multiple fields associated with a key
-        assert(fields == null);
-        assert(fields->size() == 1);
-
         return DB::Status::kOK;
-
     }
 
     DB::Status ExampleDB::Delete(const std::string &table, const std::string &key) {
-        // for the beginning we only do one key values, ignore for the first multiple fields associated with a key
-        assert(fields == null);
-        assert(fields->size() == 1);
-
         return DB::Status::kOK;
     }
 
