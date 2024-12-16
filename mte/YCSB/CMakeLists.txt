@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(ycsb-cpp LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 
-set(CMAKE_CXX_FLAGS "-pthread")
+set(CMAKE_CXX_FLAGS "-pthread -D_GLIBCXX_USE_CXX11_ABI=0")
 #set(CMAKE_CXX_FLAGS "-pthread -march=armv8.5-a+memtag -fsanitize=memtag-heap")
 
 

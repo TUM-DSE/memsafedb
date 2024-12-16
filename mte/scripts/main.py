@@ -72,24 +72,14 @@ async def run_ssh_command(user: str, host: str, port: int, cmd: str) -> None:
 
 
 async def run_analyse_remote(user: str, host: str, port: int, datastructure: str):
-    # todo: assert if the format is valid
-    # todo: create a context, which can run ssh commands?
-    tmp_folder = Path("/tmp/") / Path(str(uuid.uuid4()))
-    info(
-        msg=f"Setup anaylse enviroment for '{datastructure}' in {tmp_folder}", intend=0
+    cmd = (
+        f"cd {MTE_ROOT_REMOTE} && "
+        f"./mte/scripts/setup_benchmark_environment.sh "
+        f"{MTE_ROOT_REMOTE}/mte/YCSB/workloads "
+        f"{MTE_ROOT_REMOTE}/mte/YCSB/build/ "
+        f"{MTE_ROOT_REMOTE}/mte/YCSB/{datastructure}/benchmark.sh "
     )
-    await run_ssh_command(user, host, port, f"mkdir {tmp_folder}")
-
-    executables: List[str] = map_analyser(datastructure)
-    for executable in executables:
-        cp_cmd = f"cp {MTE_ROOT_REMOTE}/mte/YCSB/build/{executable} {tmp_folder}/{executable}"
-        await run_ssh_command(user, host, port, cp_cmd)
-
-    info(f"Run benchmarks for {datastructure}", intend=0)
-    await run_ssh_command(user, host, port, f"cd {tmp_folder} && ./benchmark")
-
-    info("Tear down enviroment", intend=0)
-    # await run_ssh_command(user, host, port, f"rm -rf {tmp_folder}")
+    await run_ssh_command(user, host, port, cmd)
 
 
 async def run_build_remote(user: str, host: str, datastructure: str, port: int):
@@ -97,7 +87,7 @@ async def run_build_remote(user: str, host: str, datastructure: str, port: int):
     build_cmd = (
         f"cd {MTE_YCSB_REMOTE} && "
         f"cmake -B build -D{datastructure}=ON . && "
-        "cmake --build build"
+        "cmake --build build --clean-first"
     )
 
     await run(f"ssh -p {port} {user}@{host} '{build_cmd}'")
@@ -167,14 +157,15 @@ if __name__ == "__main__":
         help="Specify the data structure to analyse on the remote machine.",
     )
 
-    # Parse arguments
     args = parser.parse_args()
     user, host, port = args.user, args.host, args.port
 
     if args.subcommands == "copy":
+        info("Copy files to the remote machine.", intend=0)
         asyncio.run(run_copy(user=user, host=host, port=port))
 
     elif args.subcommands == "build":
+        info("Build the YCSB data structure on the remote machine.", intend=0)
         asyncio.run(
             run_build_remote(
                 user=user, host=host, port=port, datastructure=args.datastructure
@@ -182,6 +173,7 @@ if __name__ == "__main__":
         )
 
     elif args.subcommands == "analyse":
+        info("Analyse the YCSB data structure on the remote machine.", intend=0)
         asyncio.run(
             run_analyse_remote(
                 user=user, host=host, port=port, datastructure=args.datastructure
