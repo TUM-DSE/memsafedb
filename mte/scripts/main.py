@@ -72,6 +72,8 @@ async def run_ssh_command(user: str, host: str, port: int, cmd: str) -> None:
 
 
 async def run_analyse_remote(user: str, host: str, port: int, datastructure: str):
+    # todo: assert if the format is valid
+    # todo: create a context, which can run ssh commands?
     tmp_folder = Path("/tmp/") / Path(str(uuid.uuid4()))
     info(
         msg=f"Setup anaylse enviroment for '{datastructure}' in {tmp_folder}", intend=0
@@ -84,6 +86,7 @@ async def run_analyse_remote(user: str, host: str, port: int, datastructure: str
         await run_ssh_command(user, host, port, cp_cmd)
 
     info(f"Run benchmarks for {datastructure}", intend=0)
+    await run_ssh_command(user, host, port, f"cd {tmp_folder} && ./benchmark")
 
     info("Tear down enviroment", intend=0)
     # await run_ssh_command(user, host, port, f"rm -rf {tmp_folder}")
