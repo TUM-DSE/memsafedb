@@ -37,30 +37,29 @@ DB_TEMP="$TEMP_DIR/db"
 mkdir -p "$WORKLOADS_TEMP"
 mkdir -p "$DB_TEMP"
 
-echo '--- Moved YCSB workloads'
+echo "--- Moved YCSB workloads."
 rsync -av "$WORKLOADS_FOLDER"/* "$WORKLOADS_TEMP"/
 
-echo '--- Moved binary files'
+echo "--- Moved binary files."
 rsync -av --exclude='CMakeFiles' \
   --exclude='CMakeCache.txt' \
   --exclude='Makefile' \
   --exclude='cmake_install.cmake' \
   "$BINARIES_FOLDER"/* "$DB_TEMP"/
 
-echo '--- Moved benchmark script'
+echo "--- Moved benchmark script."
 rsync -av "$BENCHMARK_SCRIPT" "$DB_TEMP"/
 
-echo '--- Run benchmark'
+echo "--- Run benchmark."
 pushd "$DB_TEMP" > /dev/null
 chmod +x "$(basename "$BENCHMARK_SCRIPT")"
 ./"$(basename "$BENCHMARK_SCRIPT")"
 popd > /dev/null
+echo "--- Finished benchmark."
 
+rsync -av "$DB_TEMP"/result.txt "$BINARIES_FOLDER"/
 
-echo '--- Transfer benchmark results back'
-#rsync -av "$BENCHMARK_SCRIPT" "$DB_TEMP"/
+rm -rf "$TEMP_DIR"
 
-#rm -rf "$TEMP_DIR"
-
-echo "Benchmark completed and temporary files removed."
-
+echo "--- Benchmark completed and temporary files removed."
+echo "--- Transfer benchmark results back."

@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.10)
 project(ycsb-cpp LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 
-set(CMAKE_CXX_FLAGS "-pthread -D_GLIBCXX_USE_CXX11_ABI=0")
-#set(CMAKE_CXX_FLAGS "-pthread -march=armv8.5-a+memtag -fsanitize=memtag-heap")
+#set(CMAKE_CXX_FLAGS "-pthread -D_GLIBCXX_USE_CXX11_ABI=0")
+set(CMAKE_CXX_FLAGS "-pthread -march=armv8.5-a+memtag -fsanitize=memtag-heap")
 
 
 option(EXAMPLEDB "Include the example files in the build" OFF)
@@ -13,8 +13,8 @@ include(FindThreads)
 
 if(EXAMPLEDB)
     set(EXAMPLEDB_VARIATIONS 
-        "exampledb_O0" 
-        "exampledb_O3"
+      "O2_TAGGED" 
+      "O2_UNTAGGED"
     )
 
     foreach(variant IN LISTS EXAMPLEDB_VARIATIONS)
@@ -24,10 +24,12 @@ if(EXAMPLEDB)
         add_executable(ycsb_${variant} ${SOURCES})
         target_include_directories(ycsb_${variant} PRIVATE ${PROJECT_SOURCE_DIR})
 
-        if(variant STREQUAL "exampledb_O0")
-            target_compile_options(ycsb_${variant} PRIVATE -O0 -g)
-        elseif(variant STREQUAL "exampledb_O3")
-            target_compile_options(ycsb_${variant} PRIVATE -O3 -funroll-loops)
+        if(variant STREQUAL "O2_TAGGED")
+          target_compile_options(ycsb_${variant} PRIVATE 
+            -O2 -march=armv8.5-a+memtag -fsanitize=memtag-heap)
+        elseif(variant STREQUAL "O2_UNTAGGED")
+          target_compile_options(ycsb_${variant} PRIVATE
+            -O2 -march=armv8.5-a+memtag)
         endif()
 
     endforeach()

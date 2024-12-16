@@ -1,6 +1,5 @@
 import argparse
 import asyncio
-import uuid
 
 from pathlib import Path
 from typing import Optional, List
@@ -81,6 +80,13 @@ async def run_analyse_remote(user: str, host: str, port: int, datastructure: str
     )
     await run_ssh_command(user, host, port, cmd)
 
+    cmd = (
+        f'rsync -avz -e "ssh -A -p {port}" '
+        f"{user}@{host}:{MTE_ROOT_REMOTE}/mte/YCSB/build/result.txt "
+        f"{MTE_ROOT_LOCAL}/result.txt "
+    )
+    await run(cmd)
+
 
 async def run_build_remote(user: str, host: str, datastructure: str, port: int):
     datastructure = datastructure.upper()
@@ -89,7 +95,6 @@ async def run_build_remote(user: str, host: str, datastructure: str, port: int):
         f"cmake -B build -D{datastructure}=ON . && "
         "cmake --build build --clean-first"
     )
-
     await run(f"ssh -p {port} {user}@{host} '{build_cmd}'")
 
 
