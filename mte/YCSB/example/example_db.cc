@@ -9,7 +9,6 @@ namespace ycsbc {
                                const std::vector<std::string> *fields, std::vector<Field> &result) {
         // for the beginning we only do one key values, ignore for the first multiple fields associated with a key
         assert(fields == nullptr);
-        assert(fields->size() == 1);
 
         auto e = this->map.find(key);
         if (e == this->map.end()) {
@@ -25,7 +24,6 @@ namespace ycsbc {
                                const std::vector<std::string> *fields, std::vector<std::vector<Field>> &result) {
         // for the beginning we only do one key values, ignore for the first multiple fields associated with a key
         assert(fields == nullptr);
-        assert(fields->size() == 1);
 
         return DB::Status::kOK;
     }
