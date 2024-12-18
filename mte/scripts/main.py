@@ -92,7 +92,7 @@ async def run_build_remote(user: str, host: str, datastructure: str, port: int):
     datastructure = datastructure.upper()
     build_cmd = (
         f"cd {MTE_YCSB_REMOTE} && "
-        f"cmake -B build -D{datastructure}=ON . && "
+        f"cmake -B build -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -D{datastructure}=ON . && "
         "cmake --build build --clean-first"
     )
     await run(f"ssh -p {port} {user}@{host} '{build_cmd}'")

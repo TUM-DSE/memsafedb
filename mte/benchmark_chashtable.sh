@@ -33,5 +33,5 @@ if [ -z "$PORT" ]; then
 fi
 
 python ./scripts/main.py --user $USER --host $HOST --port $PORT copy
-python ./scripts/main.py --user $USER --host $HOST --port $PORT build --datastructure exampledb
-python ./scripts/main.py --user $USER --host $HOST --port $PORT analyse --datastructure exampledb
+python ./scripts/main.py --user $USER --host $HOST --port $PORT build --datastructure  chashtabledb
+python ./scripts/main.py --user $USER --host $HOST --port $PORT analyse --datastructure chashtabledb
