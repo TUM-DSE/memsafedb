@@ -82,7 +82,7 @@ async def run_analyse_remote(user: str, host: str, port: int, datastructure: str
 
     cmd = (
         f'rsync -avz -e "ssh -A -p {port}" '
-        f"{user}@{host}:{MTE_ROOT_REMOTE}/mte/YCSB/build/result.txt "
+        f"{user}@{host}:{MTE_ROOT_REMOTE}/mte/YCSB/results "
         f"{MTE_ROOT_LOCAL}/result.txt "
     )
     await run(cmd)
@@ -92,6 +92,7 @@ async def run_build_remote(user: str, host: str, datastructure: str, port: int):
     datastructure = datastructure.upper()
     build_cmd = (
         f"cd {MTE_YCSB_REMOTE} && "
+        f"rm -rf build && "
         f"cmake -B build -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -D{datastructure}=ON . && "
         "cmake --build build --clean-first"
     )

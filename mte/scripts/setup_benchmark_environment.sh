@@ -57,7 +57,8 @@ chmod +x "$(basename "$BENCHMARK_SCRIPT")"
 popd > /dev/null
 echo "--- Finished benchmark."
 
-rsync -av "$DB_TEMP"/result.txt "$BINARIES_FOLDER"/
+rm -rf "$BINARIES_FOLDER"/../results/
+rsync -av "$DB_TEMP"/ "$BINARIES_FOLDER"/../results/
 
 rm -rf "$TEMP_DIR"
 

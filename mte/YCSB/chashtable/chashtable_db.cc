@@ -12,4 +12,5 @@ namespace ycsbc {
     return new CHashtableDB;
   }
   const bool registered = DBFactory::RegisterDB("chashtabledb", NewCHashtableDB);
+
 }
