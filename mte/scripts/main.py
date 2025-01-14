@@ -9,12 +9,6 @@ MTE_ROOT_REMOTE = Path("~")
 MTE_YCSB_REMOTE = MTE_ROOT_REMOTE / Path("mte/YCSB")
 
 
-def map_analyser(datastructure: str) -> List[str]:
-    datastructure = datastructure.lower()
-
-    return {"exampledb": ["ycsb_exampledb_O0", "ycsb_exampledb_O3"]}[datastructure]
-
-
 def log(prefix: str, msg: str, intend: int = 0):
     intend_offset = "\t" * intend
     for line in msg.split("\n"):

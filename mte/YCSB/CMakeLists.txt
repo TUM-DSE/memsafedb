@@ -6,9 +6,35 @@ set(CMAKE_CXX_FLAGS "-pthread")
 
 option(EXAMPLEDB "Include the example files in the build" OFF)
 option(CHASHTABLEDB "Include the c-hashtable files in the build" OFF)
+option(MALLOC "Runs malloc tests" OFF)
 
 file(GLOB_RECURSE YCSB_CORE_SRC "core/*.cc")
 include(FindThreads)
+
+
+if(MALLOC)
+    set(MALLOC_VARIATIONS
+            "TAGGED_MALLOC"
+            "UNTAGGED_MALLOC"
+    )
+
+    file(GLOB_RECURSE ARRAY_SRC "array/*.cc")
+    set(SOURCES ${ARRAY_SRC})
+
+    add_executable(${variant} ${SOURCES})
+    target_include_directories(${variant} PRIVATE ${PROJECT_SOURCE_DIR})
+
+    if(variant STREQUAL "TAGGED_MALLOC")
+        target_compile_options(${variant} PRIVATE
+                -O3 -march=armv8.5-a+memtag -fsanitize=memtag-heap)
+
+    elseif(variant STREQUAL "UNTAGGED_MALLOC")
+        target_compile_options(${variant} PRIVATE -O3)
+
+    endif()
+
+endif()
+
 
 if(EXAMPLEDB)
     set(EXAMPLEDB_VARIATIONS 
@@ -45,7 +71,7 @@ if(CHASHTABLEDB)
 
     foreach(variant IN LISTS EXAMPLEDB_VARIATIONS)
         file(GLOB_RECURSE YCSB_EXAMPLEDB_SRC 
-          "chashtable/*.cc" "chashtable/*.c")
+          "chashtabledb/*.cc" "chashtabledb/*.c")
         set(SOURCES ${YCSB_CORE_SRC} ${YCSB_EXAMPLEDB_SRC})
 
         add_executable(${variant} ${SOURCES})
@@ -53,20 +79,30 @@ if(CHASHTABLEDB)
 
         if(variant STREQUAL "O2_TAGGED")
           target_compile_options(${variant} PRIVATE 
-            -O2 -march=armv8.5-a+memtag -fsanitize=memtag-heap)
+            -O2 
+            #-march=armv8.5-a+memtag 
+            #-fsanitize=memtag-heap
+          )
 
         elseif(variant STREQUAL "O2_TAGGED_GPROF")
           target_compile_options(${variant} PRIVATE
-            -O2 -march=armv8.5-a+memtag -pg -fsanitize=memtag-heap)
+            -O2 -pg
+            #-march=armv8.5-a+memtag
+            #-fsanitize=memtag-heap
+          )
           target_link_options(${variant} PRIVATE -pg)
 
         elseif(variant STREQUAL "O2_UNTAGGED")
           target_compile_options(${variant} PRIVATE
-            -O2 -march=armv8.5-a+memtag)
+            -O2 
+            #-march=armv8.5-a+memtag
+          )
 
         elseif(variant STREQUAL "O2_UNTAGGED_GPROF")
           target_compile_options(${variant} PRIVATE
-            -O2 -march=armv8.5-a+memtag -pg)
+            -O2 
+            #-march=armv8.5-a+memtag 
+            -pg)
           target_link_options(${variant} PRIVATE -pg)
 
         endif()
