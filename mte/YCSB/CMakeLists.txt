@@ -6,32 +6,45 @@ set(CMAKE_CXX_FLAGS "-pthread")
 
 option(EXAMPLEDB "Include the example files in the build" OFF)
 option(CHASHTABLEDB "Include the c-hashtable files in the build" OFF)
-option(MALLOC "Runs malloc tests" OFF)
+option(NODES "Compiles a benchmark based on linked lists" OFF)
 
 file(GLOB_RECURSE YCSB_CORE_SRC "core/*.cc")
 include(FindThreads)
 
 
-if(MALLOC)
-    set(MALLOC_VARIATIONS
-            "TAGGED_MALLOC"
-            "UNTAGGED_MALLOC"
+if(NODES)
+  set(NODES_VARIATIONS
+      "COMPACT_TAGGED_NODES"
+      "COMPACT_UNTAGGED_NODES"
+      "LOOSE_TAGGED_NODES"
+      "LOOSE_UNTAGGED_NODES"
     )
 
-    file(GLOB_RECURSE ARRAY_SRC "array/*.cc")
-    set(SOURCES ${ARRAY_SRC})
+    foreach(variant IN LISTS NODES_VARIATIONS)
+      file(GLOB_RECURSE ARRAY_SRC "array/*.cc")
+      set(SOURCES ${ARRAY_SRC})
 
-    add_executable(${variant} ${SOURCES})
-    target_include_directories(${variant} PRIVATE ${PROJECT_SOURCE_DIR})
+      add_executable(${variant} ${SOURCES})
+      target_include_directories(${variant} PRIVATE ${PROJECT_SOURCE_DIR})
 
-    if(variant STREQUAL "TAGGED_MALLOC")
-        target_compile_options(${variant} PRIVATE
-                -O3 -march=armv8.5-a+memtag -fsanitize=memtag-heap)
+      if(variant STREQUAL "COMPACT_TAGGED_NODES")
+          target_compile_options(${variant} PRIVATE
+            -O3 -march=armv8.5-a+memtag -fsanitize=memtag-heap -OCOMPACT -OMTE)
 
-    elseif(variant STREQUAL "UNTAGGED_MALLOC")
-        target_compile_options(${variant} PRIVATE -O3)
+      elseif(variant STREQUAL "COMPACT_UNTAGGED_NODES")
+          target_compile_options(${variant} PRIVATE
+            -O3 -OCOMPACT)
 
-    endif()
+      elseif(variant STREQUAL "LOOSE_TAGGED_NODES")
+          target_compile_options(${variant} PRIVATE
+            -O3 -march=armv8.5-a+memtag -fsanitize=memtag-heap -OMTE)
+
+      elseif(variant STREQUAL "LOOSE_UNTAGGED_NODES")
+          target_compile_options(${variant} PRIVATE
+            -O3)
+
+      endif()
+    endforeach()    
 
 endif()
 

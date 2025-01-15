@@ -5,11 +5,26 @@
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <malloc.h>
 #include <time.h>
 #include <ctype.h>
+#include <x86intrin.h>
 
-int main(int argc, char **args) {
+int main() {
+
+    uint64_t start = __rdtsc();
+    // Code to measure
+    for (volatile int i = 0; i < 1000000; i++);
+    uint64_t end = __rdtsc();
+
+
+    printf("Cycles: %lu\n", end - start);
+    return 0;
+}
+
+
+int main1(int argc, char **args) {
     if (argc != 2) {
         printf("Usage %s <iteration>\n", args[0]);
         exit(EXIT_FAILURE);
@@ -25,7 +40,7 @@ int main(int argc, char **args) {
     }
 
     // make it so small that no mmap is used (the -8 because the size must still be 8 byte aligned, will be rounded up to the next multiple of 8)
-    size_t s = 1024 * 1024 * 4 * sizeof(long) - 64;
+    size_t s = 2048; // 1024 * 1024 * 4 * sizeof(long) - 64;
     clock_t begin = clock();
 
     for (u_int32_t j = 0; j < i; ++j) {
