@@ -10,8 +10,14 @@ df = pd.read_csv('result.csv', delimiter=';')
 # Strip any leading/trailing whitespace from column names
 df.columns = df.columns.str.strip()
 
+# Convert 'nano' column to numeric, coercing errors to NaN
+df['nano'] = pd.to_numeric(df['nano'], errors='coerce')
+
 # Check column names for debugging
 print(df.columns)
+
+# Remove rows with NaN in 'nano' (if conversion failed)
+df = df.dropna(subset=['nano'])
 
 # Remove outliers based on the Interquartile Range (IQR) method
 def remove_outliers(df, column):

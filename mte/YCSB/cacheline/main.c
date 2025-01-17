@@ -22,22 +22,19 @@ struct uint32_slice {
 
 static struct uint32_slice uint32_slice_init(size_t size) {
   assert(size > 0);
-  void *arr = mmap(NULL, sizeof(uint32_t) * size, PROT_READ | PROT_WRITE,
-                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  if (arr == MAP_FAILED) {
+
+  void *arr = malloc(sizeof(uint32_t) * size);
+  if (!arr) {
     panic("OOM");
   }
 
   return (struct uint32_slice){.arr = arr, .len = size};
 }
 
-static void uint32_slice_deinit(struct uint32_slice s) {
-  if (munmap(s.arr, sizeof(uint32_t) * s.len) == -1) {
-    panic("Failed to free memory arena");
-  }
-}
+static void uint32_slice_deinit(struct uint32_slice s) { free(s.arr); }
 
-static uint64_t sum_with_steps(struct uint32_slice s, size_t steps) {
+__attribute__((noinline)) static uint64_t sum_with_steps(struct uint32_slice s,
+                                                         size_t steps) {
   uint64_t sum = 0;
 
   for (size_t i = 0; i < s.len; i += steps) {
@@ -88,6 +85,7 @@ int main(int argc, char **args) {
 
   struct timespec duration = diff(time1, time2);
   uint64_t nano = duration.tv_sec * 1e9 + duration.tv_nsec;
+  uint32_slice_deinit(s);
 
   printf("%lu;%lu;%lu;%lu;%lu\n", size, seed, steps, sum, nano);
 }

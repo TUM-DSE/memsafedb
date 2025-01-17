@@ -1,54 +1,50 @@
 //
 // Created by raphael-dichler on 1/14/25.
 //
+#include <assert.h>
+#include <malloc.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdint.h>
-#include <malloc.h>
 #include <stdlib.h>
-#include <assert.h>
 #include <sys/mman.h>
 
 #include "slices.h"
 #include "walking_order.h"
 
-#ifdef  MTE
+#ifdef MTE
 #include <arm_acle.h>
 #endif
 
 void *tag_64byte(void *start) {
-#ifdef  MTE
+#ifdef MTE
   uintptr_t addr = (uintptr_t)start;
   addr = __arm_mte_create_random_tag(addr, 0);
 
-  asm volatile (
-      "st2g %0, [%0]\n\t"        // Store tag for first 32 bytes
-      "st2g %0, [%0, #32]\n\t"   // Store tag for next 32 bytes
-      :                          // No output operands
-      : "r" (addr)               // Input operand
-      : "memory"                 // Clobbers memory
-      );
+  asm volatile("st2g %0, [%0]\n\t"      // Store tag for first 32 bytes
+               "st2g %0, [%0, #32]\n\t" // Store tag for next 32 bytes
+               :                        // No output operands
+               : "r"(addr)              // Input operand
+               : "memory"               // Clobbers memory
+  );
 
   return addr;
 #endif
   return NULL;
 }
 
-
 #define ARENA_SIZE 2048
 
 #ifdef MTE
-//https://developer.arm.com/documentation/101028/0012/10--Memory-tagging-intrinsics
+// https://developer.arm.com/documentation/101028/0012/10--Memory-tagging-intrinsics
 #define __ARM_FEATURE_MEMORY_TAGGING
 #endif
 
-
-#define panic(msg) do { \
-  fprintf(stderr, "PANIC: %s (%s:%d)\n", msg, __FILE__, __LINE__); \
-  abort(); \
-} while (0)
-
+#define panic(msg)                                                             \
+  do {                                                                         \
+    fprintf(stderr, "PANIC: %s (%s:%d)\n", msg, __FILE__, __LINE__);           \
+    abort();                                                                   \
+  } while (0)
 
 struct memory_arena {
   uint8_t *arena;
@@ -66,7 +62,8 @@ struct memory_arena *memory_arena_init() {
   if (!ma) {
     panic("OOM");
   }
-  void *m = mmap(NULL, ARENA_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  void *m = mmap(NULL, ARENA_SIZE, PROT_READ | PROT_WRITE,
+                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   if (m == MAP_FAILED) {
     panic("OOM");
   }
@@ -84,7 +81,6 @@ struct memory_arena *memory_arena_init() {
   return ma;
 }
 
-
 void memory_arena_deinit(struct memory_arena *ma) {
   if (munmap(ma->arena, ARENA_SIZE) == -1) {
     panic("Failed to free memory arena");
@@ -98,7 +94,7 @@ struct node *memory_arena_node_init(struct memory_arena *ma) {
     panic("To many nodes inside the arena");
   }
 
-  struct node *n = (struct node *) (&ma->arena[ma->nodes_allocated * 64]);
+  struct node *n = (struct node *)(&ma->arena[ma->nodes_allocated * 64]);
   ma->nodes_allocated += 1;
 
 #ifdef MTE
@@ -111,13 +107,12 @@ struct node *memory_arena_node_init(struct memory_arena *ma) {
   return n;
 }
 
-
 /*
  * What do we want to see:
- *  The difference in time between tagged and untag should be come increasingly smaller
- *  because the fetching of the tags in the tagging area is much better here.
- *  Assumption is that with random access via nodes the prefetching of the tags get increasingly harder
- *  which results in bad performance.
+ *  The difference in time between tagged and untag should be come increasingly
+ * smaller because the fetching of the tags in the tagging area is much better
+ * here. Assumption is that with random access via nodes the prefetching of the
+ * tags get increasingly harder which results in bad performance.
  *
  *  With one node per region: 100_000 * 64 bytes are used for
  */
@@ -157,10 +152,9 @@ int main(int argc, char **args) {
 
 #endif
 
-
 #ifdef COMPACT
   printf("mode: COMPACT\n");
-  // 2048 / 64 = 32 nodes per arena 
+  // 2048 / 64 = 32 nodes per arena
   // 100_000 nodes needed -> 100_000 / 32 = 3125
   size_t nodes_per_arena = (ARENA_SIZE / sizeof(struct node));
   num_arenas = num_nodes / nodes_per_arena + 1;
@@ -171,7 +165,7 @@ int main(int argc, char **args) {
   }
 
   for (size_t i = 0; i < num_arenas; ++i) {
-      arenas[i] = memory_arena_init();
+    arenas[i] = memory_arena_init();
   }
 
   // fill each arena which nodes
@@ -205,8 +199,7 @@ int main(int argc, char **args) {
 #endif
   printf("Connecting nodes\n");
 
-  
-  // connect nodes 
+  // connect nodes
   uint32_t curr = 0;
   for (uint32_t i = 0; i < num_nodes - 1; ++i) {
     uint32_t next = walking_order.arr[curr];
@@ -226,14 +219,12 @@ int main(int argc, char **args) {
   // walk nodes
   while (n->next) {
     sum2 += n->value;
-    n  = n->next;
+    n = n->next;
   }
-
 
   printf("sum1: %ld\n", sum1);
   printf("sum2: %ld\n", sum2);
   assert(sum1 == sum2);
-
 
   for (uint32_t i = 0; i < num_arenas; ++i) {
     memory_arena_deinit(arenas[i]);

@@ -22,3 +22,7 @@ build/
 **/*.cbp
 **/CMakeScripts
 **/compile_commands.json
+
+
+
+**/*.csv
