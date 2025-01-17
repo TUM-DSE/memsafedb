@@ -77,7 +77,7 @@ async def run_analyse_remote(user: str, host: str, port: int, datastructure: str
     cmd = (
         f'rsync -avz -e "ssh -A -p {port}" '
         f"{user}@{host}:{MTE_ROOT_REMOTE}/mte/YCSB/results "
-        f"{MTE_ROOT_LOCAL}/result.txt "
+        f"{MTE_ROOT_LOCAL} "
     )
     await run(cmd)
 
