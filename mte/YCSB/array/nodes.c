@@ -35,11 +35,6 @@ void *tag_64byte(void *start) {
 
 #define ARENA_SIZE 2048
 
-#ifdef MTE
-// https://developer.arm.com/documentation/101028/0012/10--Memory-tagging-intrinsics
-#define __ARM_FEATURE_MEMORY_TAGGING
-#endif
-
 #define panic(msg)                                                             \
   do {                                                                         \
     fprintf(stderr, "PANIC: %s (%s:%d)\n", msg, __FILE__, __LINE__);           \
@@ -119,7 +114,7 @@ struct node *memory_arena_node_init(struct memory_arena *ma) {
 // 2048 / 64 = 32 --> 32 node inside 1 arena
 // 100_000 / 32 = 3125 --> different cache lines for tags need to be loaded
 // 100_000 nodes each in its own arena
-int main(int argc, char **args) {
+int main1(int argc, char **args) {
   if (argc != 3) {
     fprintf(stderr, "Usage: %s <num_nodes> <seed>\n", args[0]);
     exit(EXIT_FAILURE);

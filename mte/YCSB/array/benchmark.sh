@@ -5,10 +5,8 @@ set -o nounset  # fail when accessing an unset variable
 set -o pipefail # fail pipeline if any command errors
 
 files=(
-  "COMPACT_TAGGED_NODES"
-  "COMPACT_UNTAGGED_NODES"
-  "LOOSE_TAGGED_NODES"
-  "LOOSE_UNTAGGED_NODES"
+  "sparse"
+  "dense"
 )
 missing=false
 
@@ -24,16 +22,30 @@ if $missing; then
 fi
 
 
-touch result.txt
-echo "--- COMPACT_TAGGED_NODES ---" >> result.txt
-./COMPACT_TAGGED_NODES 10000 1337 | tee -a result.txt 
 
-echo "--- COMPACT_UNTAGGED_NODES ---" >> result.txt
-./COMPACT_UNTAGGED_NODES 10000 1337 | tee -a result.txt 
+ARRAY_SIZES=()
+for size in $(seq 1048576 104857600 104857600); do 
+  ARRAY_SIZES+=($size)
+done
 
-echo "--- LOOSE_TAGGED_NODES ---" >> result.txt
-./LOOSE_TAGGED_NODES 10000 1337 | tee -a result.txt 
+SEED=1337
 
-echo "--- LOOSE_UNTAGGED_NODES ---" >> result.txt
-time ./LOOSE_UNTAGGED_NODES 10000 1337 | tee -a result.txt 
+rm -f result_sparse.csv
+touch result_sparse.csv
+for size in "${ARRAY_SIZES[@]}"; do
+  for i in {1..20}; do
+    ./sparse "$size" "$SEED" | tee -a result_sparse.csv
+  done
+done
+
+
+rm -f result_dense.csv
+touch result_dense.csv
+for size in "${ARRAY_SIZES[@]}"; do
+  for i in {1..20}; do
+    ./sparse "$size" "$SEED" | tee -a result_dense.csv
+  done
+done
+
+
 
