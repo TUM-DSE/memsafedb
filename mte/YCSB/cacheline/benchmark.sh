@@ -26,7 +26,7 @@ STEPS=(1)
 
 ARRAY_SIZES=()
 for ((i = 0; i < 20; i++)); do
-  ARRAY_SIZES+=($((1024 * 2**i)))
+  ARRAY_SIZES+=($((512 * 2**i)))
 done
 
 
@@ -35,8 +35,10 @@ touch data.csv
 
 echo "len;steps;duration" >> data.csv
 for size in "${ARRAY_SIZES[@]}"; do
-  for i in {1..5}; do
-    ./simple "$size" 10000000 | tee -a data.csv
+  ./storeonly $size 30000000
+  ./storeonly $size 30000000
+  for i in {1..10}; do
+    ./storeonly $size 30000000 | tee -a data.csv
   done
 done
 

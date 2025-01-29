@@ -26,7 +26,7 @@ def process_and_plot(csv_file):
     df['duration'] = df['duration'] / 1e6
 
     # Convert lengths to KB (1 element = 4 bytes)
-    df['len_kb'] = (df['len'] * 4) / 1024
+    df['len_kb'] = (df['len'] * 4) // 1024
 
     # Group data by len_kb and process each group
     processed_data = []
@@ -44,7 +44,7 @@ def process_and_plot(csv_file):
     processed_df.sort_values(by='len_kb', inplace=True)
 
     plt.figure(figsize=(10, 6))
-    for label, position in {'L1': 192, 'L2': 2 * 1024, 'L3': 8 * 1024}.items():
+    for label, position in {'L1':48, 'L2': 512, 'L3': 8 * 1024}.items():
         plt.axvline(x=position, color='r', linestyle='--', linewidth=1)
         plt.text(position, plt.ylim()[1], label, color='g', fontsize=10,
                  verticalalignment='top', horizontalalignment='center', rotation=0)
