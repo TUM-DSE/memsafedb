@@ -13,45 +13,21 @@ file(GLOB_RECURSE YCSB_CORE_SRC "core/*.cc")
 include(FindThreads)
 
 if (CACHELINE) 
-  set(CACHELINE_VARIATIONS 
-    "cacheline_load_untagged" 
-    #"cacheline_load_tagged"
-  )
+  enable_language(ASM)
 
   # Set untagged
-  file(GLOB_RECURSE CACHELINE_SRC "cacheline/*.c" "cacheline/load_only.S")
+  file(GLOB_RECURSE CACHELINE_SRC "cacheline/simple.c" "cacheline/load_only.S")
   set(SOURCES ${CACHELINE_SRC})
+  add_executable(cacheline_load_untagged ${SOURCES})
+  target_include_directories(cacheline_load_untagged PRIVATE ${PROJECT_SOURCE_DIR})
+  target_compile_options(cacheline_load_untagged PRIVATE -O3)
 
-  add_executable("cacheline_load_untagged" ${SOURCES})
-  target_include_directories("cacheline_load_untagged" PRIVATE ${PROJECT_SOURCE_DIR})
-  target_compile_options(${variant} PRIVATE -O3)
 
-  # Set tagged
-  file(GLOB_RECURSE CACHELINE_SRC "cacheline/*.c" "cacheline/load_only.S" "cacheline/tag_region.S")
+  file(GLOB_RECURSE CACHELINE_SRC "cacheline/simple.c" "cacheline/load_only.S" "cacheline/tag_region.S")
   set(SOURCES ${CACHELINE_SRC})
-
-  add_executable("cacheline_load_tagged" ${SOURCES})
-  target_include_directories("cacheline_load_ntagged" PRIVATE ${PROJECT_SOURCE_DIR})
-  target_compile_options(${variant} PRIVATE -O3 -march=armv8.5-a+memtag -OMTE)
-
-
-  #  foreach(variant IN LISTS CACHELINE_VARIATIONS)
-  # file(GLOB_RECURSE CACHELINE_SRC "cacheline/*.c" "cacheline/load_only.S")
-  # set(SOURCES  ${CACHELINE_SRC})
-  #
-  # add_executable(${variant} ${SOURCES})
-  # target_include_directories(${variant} PRIVATE ${PROJECT_SOURCE_DIR})
-  #
-  # if(variant STREQUAL "cacheline_load_untagged")
-  #   target_compile_options(${variant} PRIVATE 
-  #     -O3)
-  #
-  # elseif(variant STREQUAL "cacheline_load_tagged")
-  #   target_compile_options(${variant} PRIVATE
-  #     -O3 -march=armv8.5-a+memtag -OMTE)
-  #
-  # endif()
-  #endforeach()
+  add_executable(cacheline_load_tagged ${SOURCES})
+  target_include_directories(cacheline_load_tagged PRIVATE ${PROJECT_SOURCE_DIR})
+  target_compile_options(cacheline_load_tagged PRIVATE -O3 -march=armv8.5-a+memtag -OMTE)
 endif()
 
 
