@@ -5,7 +5,8 @@ set -o nounset  # fail when accessing an unset variable
 set -o pipefail # fail pipeline if any command errors
 
 files=(
-  "simple"
+  "cacheline_load_untagged" 
+  "cacheline_load_tagged"
 )
 missing=false
 
@@ -20,25 +21,32 @@ if $missing; then
   exit 1
 fi
 
-STEP=1
-SEED=1337
-STEPS=(1)
-
 ARRAY_SIZES=()
 for ((i = 0; i < 20; i++)); do
   ARRAY_SIZES+=($((512 * 2**i)))
 done
 
 
-rm -f data.csv
-touch data.csv
+rm -f result_untagged.csv
+touch result_untagged.csv
 
 echo "len;steps;duration" >> data.csv
 for size in "${ARRAY_SIZES[@]}"; do
-  ./storeonly $size 30000000
-  ./storeonly $size 30000000
+  ./cacheline_load_untagged $size 30000000
+  ./cacheline_load_untagged $size 30000000
   for i in {1..10}; do
-    ./storeonly $size 30000000 | tee -a data.csv
+    ./cacheline_load_untagged $size 30000000 | tee -a result_untagged.csv
   done
 done
 
+
+rm -f result_tagged.csv
+touch result_tagged.csv
+echo "len;steps;duration" >> data.csv
+for size in "${ARRAY_SIZES[@]}"; do
+  ./cacheline_load_tagged $size 30000000
+  ./cacheline_load_tagged $size 30000000
+  for i in {1..10}; do
+    ./cacheline_load_tagged $size 30000000 | tee -a result_tagged.csv
+  done
+done

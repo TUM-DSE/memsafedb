@@ -44,11 +44,12 @@ def process_and_plot(csv_file):
     processed_df.sort_values(by='len_kb', inplace=True)
 
     plt.figure(figsize=(10, 6))
+    """
     for label, position in {'L1':48, 'L2': 512, 'L3': 8 * 1024}.items():
         plt.axvline(x=position, color='r', linestyle='--', linewidth=1)
         plt.text(position, plt.ylim()[1], label, color='g', fontsize=10,
                  verticalalignment='top', horizontalalignment='center', rotation=0)
-
+    """
 
     plt.plot(processed_df['len_kb'], processed_df['mean_duration'], marker='o', linestyle='-', color='b')
     plt.xscale('log', base=2)

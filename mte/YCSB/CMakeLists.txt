@@ -14,27 +14,44 @@ include(FindThreads)
 
 if (CACHELINE) 
   set(CACHELINE_VARIATIONS 
-    "cacheline_untagged" 
-    "cacheline_tagged"
+    "cacheline_load_untagged" 
+    #"cacheline_load_tagged"
   )
 
-  foreach(variant IN LISTS CACHELINE_VARIATIONS)
-    file(GLOB_RECURSE CACHELINE_SRC "cacheline/*.c")
-    set(SOURCES  ${CACHELINE_SRC})
+  # Set untagged
+  file(GLOB_RECURSE CACHELINE_SRC "cacheline/*.c" "cacheline/load_only.S")
+  set(SOURCES ${CACHELINE_SRC})
 
-    add_executable(${variant} ${SOURCES})
-    target_include_directories(${variant} PRIVATE ${PROJECT_SOURCE_DIR})
+  add_executable("cacheline_load_untagged" ${SOURCES})
+  target_include_directories("cacheline_load_untagged" PRIVATE ${PROJECT_SOURCE_DIR})
+  target_compile_options(${variant} PRIVATE -O3)
 
-    if(variant STREQUAL "cacheline_untagged")
-      target_compile_options(${variant} PRIVATE 
-        -O3)
+  # Set tagged
+  file(GLOB_RECURSE CACHELINE_SRC "cacheline/*.c" "cacheline/load_only.S" "cacheline/tag_region.S")
+  set(SOURCES ${CACHELINE_SRC})
 
-    elseif(variant STREQUAL "cacheline_tagged")
-      target_compile_options(${variant} PRIVATE
-        -O3 -march=armv8.5-a+memtag)
+  add_executable("cacheline_load_tagged" ${SOURCES})
+  target_include_directories("cacheline_load_ntagged" PRIVATE ${PROJECT_SOURCE_DIR})
+  target_compile_options(${variant} PRIVATE -O3 -march=armv8.5-a+memtag -OMTE)
 
-    endif()
-  endforeach()
+
+  #  foreach(variant IN LISTS CACHELINE_VARIATIONS)
+  # file(GLOB_RECURSE CACHELINE_SRC "cacheline/*.c" "cacheline/load_only.S")
+  # set(SOURCES  ${CACHELINE_SRC})
+  #
+  # add_executable(${variant} ${SOURCES})
+  # target_include_directories(${variant} PRIVATE ${PROJECT_SOURCE_DIR})
+  #
+  # if(variant STREQUAL "cacheline_load_untagged")
+  #   target_compile_options(${variant} PRIVATE 
+  #     -O3)
+  #
+  # elseif(variant STREQUAL "cacheline_load_tagged")
+  #   target_compile_options(${variant} PRIVATE
+  #     -O3 -march=armv8.5-a+memtag -OMTE)
+  #
+  # endif()
+  #endforeach()
 endif()
 
 

@@ -6,12 +6,28 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <time.h>
+#include <unistd.h>
 
 extern void benchmark(uint32_t *arr, size_t len, size_t steps);
 
 #define MB32 (1 << 26)
 
+#ifdef MTE
+static void *tag_region(void *ptr, size_t size) {
+  ptr = __arm_mte_create_random_tag(ptr, 0);
+  return mtag_tag_region(ptr, size)
+}
+#endif
+
 int main(int argc, char *args[]) {
+#ifdef MTE
+  unsigned long hwcap2 = getauxval(AT_HWCAP2);
+
+  /* check if MTE is present */
+  if (!(hwcap2 & HWCAP2_MTE)) {
+    panic("MTE is not present");
+  }
+#endif
   if (argc != 3) {
     printf("Usage: %s <len> <steps>\n", args[0]);
     exit(EXIT_FAILURE);
@@ -27,11 +43,18 @@ int main(int argc, char *args[]) {
   }
   assert(size % MB32 == 0);
   uint32_t *mem = mmap((void *)0x600000000000, size, PROT_READ | PROT_WRITE,
+#ifdef MTE
+                       PROT_MTE,
+#endif
                        MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0);
   if (mem == MAP_FAILED) {
     perror("mmap");
     exit(EXIT_FAILURE);
   }
+
+#ifdef MTE
+  /* Tag the mmap area */
+#endif
 
   // ensure every page is loaded befor benchmarking
   size_t idx = 0;
