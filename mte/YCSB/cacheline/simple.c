@@ -12,15 +12,8 @@ extern void benchmark(uint32_t *arr, size_t len, size_t steps);
 
 #define MB32 (1 << 26)
 
-#ifdef MTE
-static void *tag_region(void *ptr, size_t size) {
-  ptr = __arm_mte_create_random_tag(ptr, 0);
-  return mtag_tag_region(ptr, size)
-}
-#endif
-
 int main(int argc, char *args[]) {
-#ifdef MTE
+#ifdef MTE_ENABLE
   unsigned long hwcap2 = getauxval(AT_HWCAP2);
 
   /* check if MTE is present */
@@ -42,22 +35,24 @@ int main(int argc, char *args[]) {
     size = (size / MB32 + 1) * MB32;
   }
   assert(size % MB32 == 0);
-  uint32_t *mem = mmap((void *)0x600000000000, size, PROT_READ | PROT_WRITE,
-#ifdef MTE
+  uint32_t *mem = mmap(NULL, size, PROT_READ | PROT_WRITE,
+#ifdef MTE_ENABLE
                        PROT_MTE,
 #endif
-                       MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0);
+                       MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
   if (mem == MAP_FAILED) {
     perror("mmap");
     exit(EXIT_FAILURE);
   }
 
-#ifdef MTE
+#ifdef MTE_ENABLE
   /* Tag the mmap area */
+  mem = __arm_mte_create_random_tag(mem, 0);
+  mem = mtag_tag_region(ptr, size)
 #endif
 
-  // ensure every page is loaded befor benchmarking
-  size_t idx = 0;
+      // ensure every page is loaded befor benchmarking
+      size_t idx = 0;
   while (idx < len) {
     mem[idx] += 1;
     idx += 1024 / sizeof(uint32_t);

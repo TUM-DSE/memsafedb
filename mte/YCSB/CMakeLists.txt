@@ -27,7 +27,7 @@ if (CACHELINE)
   set(SOURCES ${CACHELINE_SRC})
   add_executable(cacheline_load_tagged ${SOURCES})
   target_include_directories(cacheline_load_tagged PRIVATE ${PROJECT_SOURCE_DIR})
-  target_compile_options(cacheline_load_tagged PRIVATE -O3 -march=armv8.5-a+memtag -OMTE)
+  target_compile_options(cacheline_load_tagged PRIVATE -O3 -march=armv8.5-a+memtag -OMTE_ENABLE)
 endif()
 
 

@@ -16,8 +16,6 @@
    License along with the GNU C Library.  If not, see
    <http://www.gnu.org/licenses/>.  */
 
-#include <sysdep.h>
-
 /* Assumptions:
  *
  * ARMv8-a, AArch64, MTE, LP64 ABI.
@@ -41,24 +39,24 @@ mtag_tag_region:
 	add	dstend, dstin, count
 
 	cmp	count, 96
-	b.hi	L(set_long)
+	b.hi	set_long
 
-	tbnz	count, 6, L(set96)
+	tbnz	count, 6, set96
 
 	/* Set 0, 16, 32, or 48 bytes.  */
 	lsr	tmp, count, 5
 	add	tmp, dstin, tmp, lsl 4
-	cbz     count, L(end)
+	cbz     count, end
 	stg	dstin, [dstin]
 	stg	dstin, [tmp]
 	stg	dstin, [dstend, -16]
-L(end):
+end:
 	ret
 
 	.p2align 4
 	/* Set 64..96 bytes.  Write 64 bytes from the start and
 	   32 bytes from the end.  */
-L(set96):
+set96:
 	st2g	dstin, [dstin]
 	st2g	dstin, [dstin, 32]
 	st2g	dstin, [dstend, -32]
@@ -66,15 +64,15 @@ L(set96):
 
 	.p2align 4
 	/* Size is > 96 bytes.  */
-L(set_long):
+set_long:
 	cmp	count, 160
-	b.lo	L(no_zva)
+	b.lo	no_zva
 
 #ifndef SKIP_ZVA_CHECK
 	mrs	zva_val, dczid_el0
 	and	zva_val, zva_val, 31
 	cmp	zva_val, 4		/* ZVA size is 64 bytes.  */
-	b.ne	L(no_zva)
+	b.ne	no_zva
 #endif
 	st2g	dstin, [dstin]
 	st2g	dstin, [dstin, 32]
@@ -83,23 +81,23 @@ L(set_long):
 	sub	count, count, 128	/* Adjust count and bias for loop.  */
 
 	.p2align 4
-L(zva_loop):
+zva_loop:
 	add	dst, dst, 64
 	dc	gva, dst
 	subs	count, count, 64
-	b.hi	L(zva_loop)
+	b.hi	zva_loop
 	st2g	dstin, [dstend, -64]
 	st2g	dstin, [dstend, -32]
 	ret
 
-L(no_zva):
+no_zva:
 	sub	dst, dstin, 32		/* Dst is biased by -32.  */
 	sub	count, count, 64	/* Adjust count for loop.  */
-L(no_zva_loop):
+no_zva_loop:
 	st2g	dstin, [dst, 32]
 	st2g	dstin, [dst, 64]!
 	subs	count, count, 64
-	b.hi	L(no_zva_loop)
+	b.hi	no_zva_loop
 	st2g	dstin, [dstend, -64]
 	st2g	dstin, [dstend, -32]
 	ret

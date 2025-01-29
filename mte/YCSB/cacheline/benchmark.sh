@@ -30,7 +30,7 @@ done
 rm -f result_untagged.csv
 touch result_untagged.csv
 
-echo "len;steps;duration" >> data.csv
+echo "len;steps;duration" >> result_untagged.csv
 for size in "${ARRAY_SIZES[@]}"; do
   ./cacheline_load_untagged $size 30000000
   ./cacheline_load_untagged $size 30000000
@@ -42,7 +42,7 @@ done
 
 rm -f result_tagged.csv
 touch result_tagged.csv
-echo "len;steps;duration" >> data.csv
+echo "len;steps;duration" >> result_tagged.csv
 for size in "${ARRAY_SIZES[@]}"; do
   ./cacheline_load_tagged $size 30000000
   ./cacheline_load_tagged $size 30000000
