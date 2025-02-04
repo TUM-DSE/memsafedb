@@ -1,0 +1,34 @@
+#!/usr/bin/env python
+
+from itertools import groupby
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+def plot_throughput(csv_file):
+    # Read CSV file
+    df = pd.read_csv(csv_file, sep=';')
+    
+    # Compute mean duration per (len, stride) pair
+    grouped = df.groupby(['len', 'stride'])['duration'].mean().reset_index()
+    print(grouped)
+    grouped['throughput'] = (grouped['len'] / grouped['stride']) / grouped['duration']
+    print(grouped.loc[grouped['stride'] == 1])
+
+    grouped['stride'] = grouped['stride'].astype(str)
+    
+    # Plot
+    plt.figure(figsize=(10, 6))
+    sns.lineplot(data=grouped, x='len', y='throughput', hue='stride', marker='o', palette='viridis')
+    
+    plt.xlabel('Array Size (Bytes)')
+    plt.ylabel('Throughput (MB/s)')
+    plt.title('Memory Throughput vs Array Size')
+    plt.legend(title='Stride')
+    plt.grid(True)
+    plt.savefig('/mnt/c/Users/t-rdichler/Downloads/cache_size.png')
+    plt.show()
+
+# Example usage
+plot_throughput('result.csv')
+
