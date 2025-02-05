@@ -39,4 +39,6 @@ benchmark:
   b.ne    .LBB0_2
 .LBB0_3:
   ret
+#else
+#error "We only support x86 architecture"
 #endif

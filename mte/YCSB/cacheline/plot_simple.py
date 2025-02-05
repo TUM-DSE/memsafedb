@@ -6,12 +6,15 @@ import matplotlib.pyplot as plt
 
 def remove_outliers(data, column, threshold=1.5):
     """Removes outliers from a pandas Series using the IQR method."""
+    """
     Q1 = data[column].quantile(0.25)
     Q3 = data[column].quantile(0.75)
     IQR = Q3 - Q1
     lower_bound = Q1 - threshold * IQR
     upper_bound = Q3 + threshold * IQR
     return data[(data[column] >= lower_bound) & (data[column] <= upper_bound)]
+    """
+
 
 def process_and_plot(csv_file):
     # Load the CSV file
@@ -32,10 +35,11 @@ def process_and_plot(csv_file):
     processed_data = []
     for length_kb, group in df.groupby('len_kb'):
         # Remove outliers for the group
-        group_cleaned = remove_outliers(group, 'duration')
+        #group_cleaned = remove_outliers(group, 'duration')
         # Calculate the mean duration for the len_kb
-        mean_duration = group_cleaned['duration'].mean()
-        processed_data.append({'len_kb': length_kb, 'mean_duration': mean_duration})
+        mean_duration = group['duration'].mean()
+        std_duration = group['duration'].std()
+        processed_data.append({'len_kb': length_kb, 'mean_duration': mean_duration, "std_dev": std_duration})
 
     # Create a DataFrame for the processed data
     processed_df = pd.DataFrame(processed_data)
@@ -52,13 +56,14 @@ def process_and_plot(csv_file):
     """
 
     plt.plot(processed_df['len_kb'], processed_df['mean_duration'], marker='o', linestyle='-', color='b')
+    plt.errorbar(processed_df['len_kb'], processed_df['mean_duration'], yerr=processed_df['std_dev'])
     plt.xscale('log', base=2)
     plt.title('Mean Duration vs. Array Length (in KB)')
     plt.xlabel('Array Length (KB, log scale)')
     plt.ylabel('Mean Duration (ms)')
     plt.grid(True, which="both", linestyle="--", linewidth=0.5)
-    plt.savefig('/mnt/c/Users/t-rdichler/Downloads/simple.png')
+    plt.savefig('/mnt/c/Users/t-rdichler/Downloads/simple_ldg_local_pixel_true_pin_core.png')
 
 
-process_and_plot('data.csv')
+process_and_plot('cacheline/result_out.csv')
 

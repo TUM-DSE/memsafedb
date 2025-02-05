@@ -32,10 +32,8 @@ touch result_untagged.csv
 
 echo "len;steps;duration" >> result_untagged.csv
 for size in "${ARRAY_SIZES[@]}"; do
-  ./cacheline_load_untagged $size 30000000
-  ./cacheline_load_untagged $size 30000000
   for i in {1..10}; do
-    ./cacheline_load_untagged $size 30000000 | tee -a result_untagged.csv
+    taskset -c 0 ./cacheline_load_untagged $size 30000000 | tee -a result_untagged.csv
   done
 done
 
@@ -44,9 +42,7 @@ rm -f result_tagged.csv
 touch result_tagged.csv
 echo "len;steps;duration" >> result_tagged.csv
 for size in "${ARRAY_SIZES[@]}"; do
-  ./cacheline_load_tagged $size 30000000
-  ./cacheline_load_tagged $size 30000000
   for i in {1..10}; do
-    ./cacheline_load_tagged $size 30000000 | tee -a result_tagged.csv
+    taskset -c 0 ./cacheline_load_tagged $size 30000000 | tee -a result_tagged.csv
   done
 done
