@@ -29,6 +29,22 @@ if (CACHELINE_SIZE)
   target_include_directories(cacheline_size_load_tagged PRIVATE ${PROJECT_SOURCE_DIR})
   target_compile_options(cacheline_size_load_tagged PRIVATE -O3 -march=armv8.5-a+memtag -DMTE)
 
+
+  # do complex addressing
+  file(GLOB_RECURSE CACHELINE_SRC "cacheline_size/main.c" "cacheline_size/load_data.S")
+  set(SOURCES ${CACHELINE_SRC})
+  add_executable(cacheline_size_load_untagged_complex_addr ${SOURCES})
+  target_include_directories(cacheline_size_load_untagged_complex_addr PRIVATE ${PROJECT_SOURCE_DIR})
+  target_compile_options(cacheline_size_load_untagged_complex_addr PRIVATE -O3 -DCOMPLEX_ADDRESSING)
+
+  file(GLOB_RECURSE CACHELINE_SRC "cacheline_size/main.c" "cacheline_size/load_data.S" "cacheline_size/tag_region.S")
+  set(SOURCES ${CACHELINE_SRC})
+  add_executable(cacheline_size_load_tagged_complex_addr ${SOURCES})
+  target_include_directories(cacheline_size_load_tagged_complex_addr PRIVATE ${PROJECT_SOURCE_DIR})
+  target_compile_options(cacheline_size_load_tagged_complex_addr PRIVATE -O3 -march=armv8.5-a+memtag -DMTE -DCOMPLEX_ADDRESSING)
+
+
+  # compile to load only tags
   file(GLOB_RECURSE CACHELINE_SRC "cacheline_size/main.c" "cacheline_size/load_only.S" "cacheline_size/tag_region.S")
   set(SOURCES ${CACHELINE_SRC})
   add_executable(cacheline_size_load_tagged_ldg ${SOURCES})

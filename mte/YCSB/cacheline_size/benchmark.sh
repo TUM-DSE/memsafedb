@@ -7,6 +7,8 @@ set -o pipefail # fail pipeline if any command errors
 files=(
   "cacheline_size_load_untagged" 
   "cacheline_size_load_tagged"
+  "cacheline_size_load_untagged_complex_addr"
+  "cacheline_size_load_tagged_complex_addr"
   "cacheline_size_load_tagged_ldg"
 )
 missing=false
@@ -52,13 +54,41 @@ for stride in ${ARRAY_STRIDES[@]}; do
 done
 
 
-rm -f result_tagged_ldg.csv
-touch result_tagged_ldg.csv
-echo "len;stride;duration" >> result_tagged.csv
+# Complex addressing
+
+rm -f result_untagged_complex_addr.csv
+touch result_untagged_complex_addr.csv
+echo "len;stride;duration" >> result_untagged_complex_addr.csv
 for stride in ${ARRAY_STRIDES[@]}; do 
   for len in ${ARRAY_LEN[@]}; do 
     for i in {1..10}; do
-      taskset -c 0 ./cacheline_size_load_tagged $len $stride | tee -a result_tagged_ldg.csv
+      taskset -c 0 ./cacheline_size_load_untagged_complex_addr $len $stride | tee -a result_untagged_complex_addr.csv
+    done
+  done
+done
+
+
+rm -f result_tagged_complex_addr.csv
+touch result_tagged_complex_addr.csv
+echo "len;stride;duration" >> result_tagged_complex_addr.csv
+for stride in ${ARRAY_STRIDES[@]}; do 
+  for len in ${ARRAY_LEN[@]}; do 
+    for i in {1..10}; do
+      taskset -c 0 ./cacheline_size_load_tagged_complex_addr $len $stride | tee -a result_tagged_complex_addr.csv
+    done
+  done
+done
+
+
+
+
+rm -f result_tagged_ldg.csv
+touch result_tagged_ldg.csv
+echo "len;stride;duration" >> result_tagged_ldg.csv
+for stride in ${ARRAY_STRIDES[@]}; do 
+  for len in ${ARRAY_LEN[@]}; do 
+    for i in {1..10}; do
+      taskset -c 0 ./cacheline_size_load_tagged_ldg $len $stride | tee -a result_tagged_ldg.csv
     done
   done
 done
