@@ -35,11 +35,11 @@ if (CACHELINE)
   enable_language(ASM)
 
   # Set untagged
-  file(GLOB_RECURSE CACHELINE_SRC "cacheline/simple.c" "cacheline/load_only.S")
-  set(SOURCES ${CACHELINE_SRC})
-  add_executable(cacheline_load_untagged ${SOURCES})
-  target_include_directories(cacheline_load_untagged PRIVATE ${PROJECT_SOURCE_DIR})
-  target_compile_options(cacheline_load_untagged PRIVATE -O3)
+  #file(GLOB_RECURSE CACHELINE_SRC "cacheline/simple.c" "cacheline/load_only.S")
+  #set(SOURCES ${CACHELINE_SRC})
+  #add_executable(cacheline_load_untagged ${SOURCES})
+  #target_include_directories(cacheline_load_untagged PRIVATE ${PROJECT_SOURCE_DIR})
+  #target_compile_options(cacheline_load_untagged PRIVATE -O3)
 
 
   file(GLOB_RECURSE CACHELINE_SRC "cacheline/simple.c" "cacheline/load_only.S" "cacheline/tag_region.S")
