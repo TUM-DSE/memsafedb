@@ -26,11 +26,13 @@ static uint32_t *setup(size_t len) {
   }
 #endif
   size_t size = len * sizeof(uint32_t);
-  uint32_t *mem = mmap(NULL, size, PROT_READ | PROT_WRITE,
 #ifdef MTE_ENABLE
-                       PROT_MTE,
-#endif
+  uint32_t *mem = mmap(NULL, size, PROT_READ | PROT_WRITE | PROT_MTE,
                        MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+#else
+  uint32_t *mem = mmap(NULL, size, PROT_READ | PROT_WRITE,
+                       MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+#endif
 
   if (mem == MAP_FAILED) {
     perror("mmap");
