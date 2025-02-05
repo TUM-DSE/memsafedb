@@ -8,9 +8,28 @@ option(EXAMPLEDB "Include the example files in the build" OFF)
 option(CHASHTABLEDB "Include the c-hashtable files in the build" OFF)
 option(NODES "Compiles a benchmark based on linked lists" OFF)
 option(CACHELINE "Compiles a benchmark based on linked lists" OFF)
+option(CACHELINE_SIZE "Compiles a benchmark based on linked lists" OFF)
 
 file(GLOB_RECURSE YCSB_CORE_SRC "core/*.cc")
 include(FindThreads)
+
+if (CACHELINE_SIZE)
+  enable_language(ASM)
+
+  # Set untagged
+  file(GLOB_RECURSE CACHELINE_SRC "cacheline_size/simple.c" "cacheline_size/load_only.S")
+  set(SOURCES ${CACHELINE_SRC})
+  add_executable(cacheline_size_load_untagged ${SOURCES})
+  target_include_directories(cacheline_size_load_untagged PRIVATE ${PROJECT_SOURCE_DIR})
+  target_compile_options(cacheline_size_load_untagged PRIVATE -O3)
+
+  file(GLOB_RECURSE CACHELINE_SRC "cacheline_size/simple.c" "cacheline_size/load_only.S" "cacheline_size/tag_region.S")
+  set(SOURCES ${CACHELINE_SRC})
+  add_executable(cacheline_size_load_tagged ${SOURCES})
+  target_include_directories(cacheline_size_load_tagged PRIVATE ${PROJECT_SOURCE_DIR})
+  target_compile_options(cacheline_size_load_tagged PRIVATE -O3 -march=armv8.5-a+memtag -DMTE)
+endif()
+
 
 if (CACHELINE) 
   enable_language(ASM)

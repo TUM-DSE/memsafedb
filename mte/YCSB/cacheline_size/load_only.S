@@ -17,6 +17,18 @@ benchmark:
         jb      .LOOP
 .END:
         ret
+#elif __aarch64__
+benchmark:
+        cbz     x1, .END
+        mov     x8, xzr
+.LOOP:
+        ldr     w9, [x0, x8, lsl #2]
+
+        add     x8, x8, x2
+        cmp     x8, x1
+        b.lo    .LOOP
+.END:
+        ret
 #else
-#error "We only support x86 architecture"
+#error "We only support x86 and aarch64 architecture"
 #endif

@@ -12,15 +12,17 @@ def plot_throughput(csv_file):
     # Compute mean duration per (len, stride) pair
     grouped = df.groupby(['len', 'stride'])['duration'].mean().reset_index()
     print(grouped)
+
+    grouped['len'] = grouped['len'] * 4
     grouped['throughput'] = (grouped['len'] / grouped['stride']) / grouped['duration']
     print(grouped.loc[grouped['stride'] == 1])
 
     grouped['stride'] = grouped['stride'].astype(str)
+
     
     # Plot
     plt.figure(figsize=(10, 6))
     sns.lineplot(data=grouped, x='len', y='throughput', hue='stride', marker='o', palette='viridis')
-    
     plt.xlabel('Array Size (Bytes)')
     plt.ylabel('Throughput (MB/s)')
     plt.title('Memory Throughput vs Array Size')
