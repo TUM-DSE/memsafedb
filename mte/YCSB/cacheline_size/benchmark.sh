@@ -5,8 +5,9 @@ set -o nounset  # fail when accessing an unset variable
 set -o pipefail # fail pipeline if any command errors
 
 files=(
-  #"cacheline_size_load_untagged" 
+  "cacheline_size_load_untagged" 
   "cacheline_size_load_tagged"
+  "cacheline_size_load_tagged_ldg"
 )
 missing=false
 
@@ -27,16 +28,16 @@ for ((i=10000; i<=700000; i+=10000)); do
     ARRAY_LEN+=($i)
 done
 
-#rm -f result_untagged.csv
-#touch result_untagged.csv
-#echo "len;stride;duration" >> result_untagged.csv
-#for stride in ${ARRAY_STRIDES[@]}; do 
- # for len in ${ARRAY_LEN[@]}; do 
-  #  for i in {1..10}; do
-   #   taskset -c 5 ./cacheline_size_load_untagged $len $stride | tee -a result_untagged.csv
-   # done
-  #done
-#done
+rm -f result_untagged.csv
+touch result_untagged.csv
+echo "len;stride;duration" >> result_untagged.csv
+for stride in ${ARRAY_STRIDES[@]}; do 
+  for len in ${ARRAY_LEN[@]}; do 
+    for i in {1..10}; do
+      taskset -c 0 ./cacheline_size_load_untagged $len $stride | tee -a result_untagged.csv
+    done
+  done
+done
 
 
 rm -f result_tagged.csv
@@ -45,7 +46,19 @@ echo "len;stride;duration" >> result_tagged.csv
 for stride in ${ARRAY_STRIDES[@]}; do 
   for len in ${ARRAY_LEN[@]}; do 
     for i in {1..10}; do
-      taskset -c 5 ./cacheline_size_load_tagged $len $stride | tee -a result_tagged.csv
+      taskset -c 0 ./cacheline_size_load_tagged $len $stride | tee -a result_tagged.csv
+    done
+  done
+done
+
+
+rm -f result_tagged_ldg.csv
+touch result_tagged_ldg.csv
+echo "len;stride;duration" >> result_tagged.csv
+for stride in ${ARRAY_STRIDES[@]}; do 
+  for len in ${ARRAY_LEN[@]}; do 
+    for i in {1..10}; do
+      taskset -c 0 ./cacheline_size_load_tagged $len $stride | tee -a result_tagged_ldg.csv
     done
   done
 done

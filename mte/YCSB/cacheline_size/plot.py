@@ -27,8 +27,8 @@ def plot_throughput(csv_file):
     plt.title('Memory Throughput vs Array Size')
     plt.legend(title='Stride')
     plt.grid(True)
-    plt.savefig('/mnt/c/Users/t-rdichler/Downloads/cache_size_pixel_untagged.png')
+    plt.savefig('/mnt/c/Users/t-rdichler/Downloads/cache_size_pixel_tagged_ldg.png')
     plt.show()
 
-plot_throughput('../results/result_untagged.csv')
+plot_throughput('../results/result_tagged.csv')
 
