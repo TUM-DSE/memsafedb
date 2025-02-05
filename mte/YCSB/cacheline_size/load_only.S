@@ -27,7 +27,7 @@ benchmark:
         add     x10, x10, x0    // x10 = base + offset
 
         // Load with tag-aware access
-        ldg     w9, [x10]  
+        ldg     x9, [x10]  
 
         add     x8, x8, x2
         cmp     x8, x1
