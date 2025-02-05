@@ -18,7 +18,6 @@ benchmark:
 .END:
         ret
 #elif __aarch64__
-benchmark:
         cbz     x1, .END
         mov     x8, xzr
 .LOOP:
