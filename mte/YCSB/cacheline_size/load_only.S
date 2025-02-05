@@ -21,7 +21,13 @@ benchmark:
         cbz     x1, .END
         mov     x8, xzr
 .LOOP:
-        ldg     w9, [x0, x8, lsl #2]
+        // Compute address manually
+        mov     x10, x8
+        lsl     x10, x10, #2    // x10 = x8 * 4
+        add     x10, x10, x0    // x10 = base + offset
+
+        // Load with tag-aware access
+        ldg     w9, [x10]  
 
         add     x8, x8, x2
         cmp     x8, x1
