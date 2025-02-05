@@ -22,7 +22,8 @@ static uint32_t *setup(size_t len) {
 
   /* check if MTE is present */
   if (!(hwcap2 & HWCAP2_MTE)) {
-    panic("MTE is not present");
+    perror("MTE is not present");
+    exit(EXIT_FAILURE);
   }
 #endif
   size_t size = len * sizeof(uint32_t);

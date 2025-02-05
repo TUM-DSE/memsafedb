@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-from itertools import groupby
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -28,9 +27,8 @@ def plot_throughput(csv_file):
     plt.title('Memory Throughput vs Array Size')
     plt.legend(title='Stride')
     plt.grid(True)
-    plt.savefig('/mnt/c/Users/t-rdichler/Downloads/cache_size.png')
+    plt.savefig('/mnt/c/Users/t-rdichler/Downloads/cache_size_pixel_untagged.png')
     plt.show()
 
-# Example usage
-plot_throughput('result.csv')
+plot_throughput('../results/result_untagged.csv')
 

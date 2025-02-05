@@ -17,13 +17,13 @@ if (CACHELINE_SIZE)
   enable_language(ASM)
 
   # Set untagged
-  file(GLOB_RECURSE CACHELINE_SRC "cacheline_size/simple.c" "cacheline_size/load_only.S")
+  file(GLOB_RECURSE CACHELINE_SRC "cacheline_size/main.c" "cacheline_size/load_only.S")
   set(SOURCES ${CACHELINE_SRC})
   add_executable(cacheline_size_load_untagged ${SOURCES})
   target_include_directories(cacheline_size_load_untagged PRIVATE ${PROJECT_SOURCE_DIR})
   target_compile_options(cacheline_size_load_untagged PRIVATE -O3)
 
-  file(GLOB_RECURSE CACHELINE_SRC "cacheline_size/simple.c" "cacheline_size/load_only.S" "cacheline_size/tag_region.S")
+  file(GLOB_RECURSE CACHELINE_SRC "cacheline_size/main.c" "cacheline_size/load_only.S" "cacheline_size/tag_region.S")
   set(SOURCES ${CACHELINE_SRC})
   add_executable(cacheline_size_load_tagged ${SOURCES})
   target_include_directories(cacheline_size_load_tagged PRIVATE ${PROJECT_SOURCE_DIR})

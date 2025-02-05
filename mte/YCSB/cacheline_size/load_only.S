@@ -21,7 +21,7 @@ benchmark:
         cbz     x1, .END
         mov     x8, xzr
 .LOOP:
-        ldr     w9, [x0, x8, lsl #2]
+        ldg     w9, [x0, x8, lsl #2]
 
         add     x8, x8, x2
         cmp     x8, x1
