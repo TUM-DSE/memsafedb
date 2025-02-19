@@ -15,7 +15,7 @@ cache_line_size_load:
 
 cache_line_size_load_mte:
 	$(CC) $(CFLAGS) -o cache_line_size_load_mte \
-		-DMTE \
+		-DMTE -march=armv8.5-a+memtag \
 		main.c \
 		../allocator/allocator.c  \
 		load_only.S

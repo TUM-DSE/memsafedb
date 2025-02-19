@@ -5,6 +5,14 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 
+#include <sys/auxv.h>
+#include <sys/prctl.h>
+
+#ifdef MTE
+#include <arm_acle.h>
+#endif
+
+
 extern void *mtag_tag_region(void *ptr, size_t size);
 
 void *alloc(size_t num_bytes) {
@@ -31,8 +39,8 @@ void *alloc(size_t num_bytes) {
 
 #ifdef MTE
   /* Tag the mmap area */
-  mem = __arm_mte_create_random_tag(mem, 0);
-  mem = mtag_tag_region(ptr, size)
+  void *p = __arm_mte_create_random_tag(mem, 0);
+  mem = mtag_tag_region(p, num_bytes);
 #endif
 
   // ensure every page is loaded befor benchmarking

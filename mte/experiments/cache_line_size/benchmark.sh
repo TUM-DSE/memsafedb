@@ -8,7 +8,7 @@ CORE=0
 
 # 256MB - 2GB; div 4 is because we use 4 byte integer for the array
 ARRAY_SIZES=()
-for ((i = 28; i <= 31; i++)); do
+for ((i = 24; i <= 30; i++)); do
   ARRAY_SIZES+=($(( (2**i) / 4 )))
 done
 

@@ -15,7 +15,7 @@ def plot_throughput(csv_file, output):
     
     grouped['len'] = grouped['len'] * 4  # Convert to bytes
     grouped['stride'] = grouped['stride'] * 4  # Convert to bytes
-    grouped['throughput'] = (grouped['len'] / grouped['stride']) / grouped['duration']
+    grouped['throughput'] = grouped['len'] / grouped['duration']
 
     # Convert stride to string for labeling
     grouped['stride'] = grouped['stride'].astype(str) + " bytes"
@@ -53,14 +53,15 @@ def plot_avg_throughput(csv_file, output):
 
     # Calculate throughput for each (len, stride) pair
     # Throughput = (len/stride) / duration
-    grouped['throughput'] = (grouped['len'] / grouped['stride']) / grouped['duration']
+    grouped['throughput'] = grouped['len'] / grouped['duration']
 
     #avg_throughput = grouped.groupby('stride')['throughput'].mean().reset_index()
     avg_throughput = grouped.groupby('stride')['throughput'].agg(['mean', 'std']).reset_index()
 
     # Create a label for strides (in bytes)
     avg_throughput['stride_label'] = avg_throughput['stride'].astype(str) + " bytes"
-    avg_throughput['throughput'] =  avg_throughput['mean'] * (avg_throughput['stride'] // 4)
+    avg_throughput['throughput'] =  avg_throughput['mean'] 
+    #* (avg_throughput['stride'] // 4)
 
     # Plot the average throughput per stride as a bar graph
     plt.figure(figsize=(10, 6))
@@ -81,6 +82,7 @@ if __name__ == '__main__':
     RESULTING_PLOTS_ROOT = EXPERIMENT_FOLDER.parent / Path("plots/") / Path(EXPERIMENT_FOLDER.name + "/")
     RESULTING_PLOTS_ROOT.mkdir(parents=True, exist_ok=True)
 
-    plot_avg_throughput('result_load.csv', str(RESULTING_PLOTS_ROOT / Path('cache_line_size_throughput_avg.png')))
-    plot_throughput('result_load.csv', str(RESULTING_PLOTS_ROOT / Path('cache_line_size_throughput.png')))
+    input = 'result_load_mte.csv'
+    plot_avg_throughput(input, str(RESULTING_PLOTS_ROOT / Path('cache_line_size_throughput_avg_mte.png')))
+    plot_throughput(input, str(RESULTING_PLOTS_ROOT / Path('cache_line_size_throughput_mte.png')))
 
