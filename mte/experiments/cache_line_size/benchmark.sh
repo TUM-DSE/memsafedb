@@ -14,12 +14,21 @@ done
 
 STRIDES=(1 2 4 8 16 32 64 128 256 512)
 
-rm -f result_load.csv
-touch result_load.csv
+run_experiment() {
+    local executable=$1
+    local output_file=$2
 
-echo "len;stride;duration" >> result_load.csv
-for size in "${ARRAY_SIZES[@]}"; do
-    for stride in "${STRIDES[@]}"; do
-        taskset -c $CORE  ./cache_line_size_load 10 $size $stride  | tee -a result_load.csv
+    rm -f "$output_file"
+    touch "$output_file"
+    echo "len;stride;duration" >> "$output_file"
+
+    for size in "${ARRAY_SIZES[@]}"; do
+        for stride in "${STRIDES[@]}"; do
+            taskset -c "$CORE" "$executable" 10 "$size" "$stride" | tee -a "$output_file"
+        done
     done
-done
+}
+
+
+run_experiment "./cache_line_size_load" "result_load.csv"
+

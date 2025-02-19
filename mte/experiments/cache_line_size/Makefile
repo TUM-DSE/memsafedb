@@ -13,5 +13,12 @@ cache_line_size_load:
 		../allocator/allocator.c  \
 		load_only.S
 
+cache_line_size_load_mte:
+	$(CC) $(CFLAGS) -o cache_line_size_load_mte \
+		-DMTE \
+		main.c \
+		../allocator/allocator.c  \
+		load_only.S
+
 clean:
 	rm -f cache_line_size_load
