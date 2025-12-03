@@ -1,1 +1,0 @@
-scp -r christian@cheri.dos.cit.tum.de:~/ch_test/output ~/cheridb/cheri_data
