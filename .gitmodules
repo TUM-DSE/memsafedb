@@ -1,28 +1,22 @@
-[submodule "structures/CLHT"]
-	path = structures/CLHT
+[submodule "datastructures/adaptive-radix-tree"]
+	path = datastructures/adaptive-radix-tree
+	url = git@github.com:rafaelkallis/adaptive-radix-tree.git
+[submodule "datastructures/CLHT"]
+	path = datastructures/CLHT
 	url = git@github.com:TUM-DSE/CHERI-CLHT.git
-[submodule "structures/cuckoo-trie-code"]
-	path = structures/cuckoo-trie-code
-	url = git@github.com:TUM-DSE/CHERI-cuckoo-trie-code.git
-[submodule "structures/libcuckoo"]
-	path = structures/libcuckoo
-	url = git@github.com:TUM-DSE/CHERI-libcuckoo.git
-[submodule "structures/hot"]
-	path = structures/hot
-	url = git@github.com:speedskater/hot.git
-[submodule "structures/oneTBB"]
-	path = structures/oneTBB
-	url = git@github.com:TUM-DSE/CHERI-oneTBB.git
-[submodule "src/benchmarks/microbenchmarks/jsonutility"]
-	path = src/benchmarks/microbenchmarks/jsonutility
-	url = git@github.com:nlohmann/json.git
-[submodule "src/perf/perforator"]
-	path = src/perf/perforator
-	url = git@github.com:zyedidia/perforator.git
-[submodule "structures/adaptive-radix-tree"]
-	path = structures/adaptive-radix-tree
-	url = git@github.com:TUM-DSE/CHERI-adaptive-radix-tree.git
-[submodule "structures/google-btree"]
-	path = structures/google-btree
-	url = git@github.com:TUM-DSE/CHERI-Google-BTree.git
-
+  branch = memsafedb
+[submodule "datastructures/YCSB"]
+	path = datastructures/YCSB
+	url = git@github.com:Meandres/YCSB-cpp.git
+  branch = memsafedb
+[submodule "dbms/duckdb"]
+	path = dbms/duckdb
+	url = git@github.com:Meandres/duckdb.git
+  branch = memsafedb
+[submodule "dbms/redis"]
+	path = dbms/redis
+	url = git@github.com:redis/redis.git
+[submodule "dbms/leveldb"]
+	path = dbms/leveldb
+	url = git@github.com:Meandres/leveldb.git
+  branch = memsafedb

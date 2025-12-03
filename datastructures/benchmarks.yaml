@@ -1,0 +1,71 @@
+definitions:
+  systems:
+    - name: "ART"
+      capabilities: ["can_scan", "can_grow"]
+      to_evaluate: ["ycsb"]
+    - name: "CLHT"
+      capabilities: ["can_multithread"]
+      to_evaluate: ["ycsb"]
+    - name: "btree"
+      capabilities: ["can_scan", "can_grow", "can_scan", "can_update"]
+      to_evaluate: ["ycsb"]
+      extra_args: ["fieldcount=1", "fieldlength=10"]
+    - name: "skiplist"
+      capabilities: ["can_grow", "can_scan"]
+      to_evaluate: ["ycsb"]
+    - name: "linklist"
+      capabilities: ["can_grow", "can_scan", "can_update"]
+      to_evaluate: ["ycsb"]
+    - name: "queue"
+      capabilities: ["can_grow", "can_multithread"]
+      to_evaluate: ["queue_bench"]
+
+  workloads:
+    - name: "YCSB-A"
+      type: "ycsb"
+      requires: ["can_update"]
+      args: ["readproportion=0.5", "updateproportion=0.5", "requestdistribution=zipfian"]
+    - name: "YCSB-B"
+      type: "ycsb"
+      requires: ["can_update"]
+      args: ["readproportion=0.95", "updateproportion=0.05", "requestdistribution=zipfian"]
+    - name: "YCSB-C"
+      type: "ycsb"
+      requires: []
+      args: ["readproportion=1", "updateproportion=0", "requestdistribution=zipfian"]
+    - name: "YCSB-D"
+      type: "ycsb"
+      requires: ["can_grow"]
+      args: ["readproportion=0.95", "updateproportion=0", "insertproportion=0.05", "requestdistribution=latest"]
+    - name: "YCSB-E"
+      type: "ycsb"
+      requires: ["can_scan", "can_grow"]
+      args: ["scanproportion=0.95", "updateproportion=0", "readproportion=0", "insertproportion=0.05", "maxscanlength=100", "scanlengthdistribution=uniform", "requestdistribution=zipfian"]
+    - name: "YCSB-F"
+      type: "ycsb"
+      requires: ["can_update"]
+      args: ["readproportion=0.5", "updateproportion=0", "readmodifywriteproportion=0.5", "requestdistribution=zipfian"]
+    - name: "read"
+      type: "ycsb"
+      requires: []
+      args: ["readproportion=1", "updateproportion=0", "requestdistribution=uniform"]
+    - name: "insert"
+      type: "ycsb"
+      requires: []
+      args: ["insertproportion=1", "updateproportion=0", "readproportion=0", "requestdistribution=uniform", "-load"]
+    - name: "update"
+      type: "ycsb"
+      requires: ["can_update"]
+      args: ["updateproportion=1", "readproportion=0", "requestdistribution=uniform"]
+    - name: "scan"
+      type: "ycsb"
+      requires: ["can_scan"]
+      args: ["scanproportion=1", "updateproportion=0", "readproportion=0", "requestdistribution=uniform"]
+    - name: "readmodifywrite"
+      type: "ycsb"
+      requires: ["can_update"]
+      args: ["readmodifywriteproportion=1", "updateproportion=0", "readproportion=0", "requestdistribution=uniform"]
+    - name: "queue_bench"
+      type: "queue_bench"
+      requires: []
+      args: []
