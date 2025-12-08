@@ -28,7 +28,7 @@ inline void* tag_pointer(void* ptr, size_t size){
   assert(size % 16 == 0);
   __asm__ volatile("irg %0, %1" : "+r" (ptr) : );
   void *end = (char*) ptr + size;
-  void *ret;
+  void *ret = ptr;
   while (ptr < end) {
     __asm__ volatile("stg %0, [%1], #16" : "+r"(ptr) : : "memory");
   }
