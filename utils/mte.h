@@ -50,7 +50,7 @@ inline void* tag_and_zero_memory_region(void* ptr, size_t size){
   return ret;
 }
 
-inline void* untag_nmemory_region(void* ptr, size_t size){
+inline void* untag_memory_region(void* ptr, size_t size){
   assert(ptr != NULL);
   assert(size % 16 == 0);
 
@@ -65,6 +65,6 @@ inline void* untag_nmemory_region(void* ptr, size_t size){
 inline void print_tag(void* ptr){
   int logical_tag = ((uintptr_t) ptr) >> 56;
   void* alloc_tag= __arm_mte_get_tag(ptr);
-  printf("ptr: %p, logical tag: %u, allocation tag: %lu\n", ptr, logical_tag, reinterpret_cast<uintptr_t>(alloc_tag)>>56);
+  printf("ptr: %p, logical tag: %u, allocation tag: %lu\n", ptr, logical_tag, ((uintptr_t)alloc_tag)>>56);
 }
 #endif
