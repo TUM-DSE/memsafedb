@@ -16,10 +16,11 @@ setup_duckdb sf="10":
 
 run_duckdb sf="10" mte="false":
   #!/usr/bin/env bash
+  set -eu
   if [[ "{{mte}}" = "true" ]] then
     export GLIBC_TUNABLES="glibc.mem.tagging=3"
   fi
-  for q in `seq 1 2`
+  for q in `seq 1 22`
   do
     {{dbms_basedir}}/duckdb/build/release/duckdb {{dbms_basedir}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
