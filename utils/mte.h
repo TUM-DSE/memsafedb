@@ -10,7 +10,7 @@
 #define MTE_GRANULE_SIZE 16
 #define MTE_MODE_SYNC 1
 #define MTE_MODE_ASYNC 2
-#define ADDR_MASK ((uintptr_t)0x00FFFFFFFFFFFFFFULL);
+#define ADDR_MASK ((uintptr_t)0x00FFFFFFFFFFFFFFULL)
 
 inline size_t round_to_tag_granule(size_t size) {
   return (size + (MTE_GRANULE_SIZE - 1)) & ~(MTE_GRANULE_SIZE - 1);
