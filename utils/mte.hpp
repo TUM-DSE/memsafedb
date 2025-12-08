@@ -42,7 +42,7 @@ inline void* untag_pointer(void* ptr, size_t size){
   void *ut_ptr = (void*)((uintptr_t)ptr & addr_mask);
   void *end = (char*) ptr + size;
   while (ptr < end) {
-    __asm__ volatile("stg %0, [%1], #16" : "+r" (ptr) : "r" (ut_ptr) : "memory");
+    __asm__ volatile("stg %1, [%0], #16" : "+r" (ptr) : "r" (ut_ptr) : "memory");
   }
   return ut_ptr;
 }
