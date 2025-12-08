@@ -10,7 +10,7 @@
 #define MTE_GRANULE_SIZE 16
 #define MTE_MODE_SYNC 1
 #define MTE_MODE_ASYNC 2
-const uintptr_t addr_mask = 0x00FFFFFFFFFFFFFFULL;
+#define ADDR_MASK ((uintptr_t)0x00FFFFFFFFFFFFFFULL);
 
 inline size_t round_to_tag_granule(size_t size) {
   return (size + (MTE_GRANULE_SIZE - 1)) & ~(MTE_GRANULE_SIZE - 1);
@@ -54,7 +54,7 @@ inline void* untag_memory_region(void* ptr, size_t size){
   assert(ptr != NULL);
   assert(size % 16 == 0);
 
-  void *ut_ptr = (void*)((uintptr_t)ptr & addr_mask);
+  void *ut_ptr = (void*)((uintptr_t)ptr & ADDR_MASK);
   void *end = (char*) ptr + size;
   while (ptr < end) {
     __asm__ volatile("stg %0, [%1], #16" : "+r" (ptr) : "r" (ut_ptr) : "memory");
