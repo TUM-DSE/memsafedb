@@ -16,7 +16,7 @@ setup_duckdb sf="10":
 
 run_duckdb sf="10" mte="false":
   #!/usr/bin/env bash
-  set -eu
+  set -eu pipefail
   if [[ "{{mte}}" = "true" ]] then
     export GLIBC_TUNABLES="glibc.mem.tagging=3"
   fi
