@@ -62,6 +62,10 @@ inline void* untag_memory_region(void* ptr, size_t size){
   return ut_ptr;
 }
 
+inline void* clear_tag(void *ptr){
+  return (void*)((uintptr_t)ptr & ADDR_MASK);
+}
+
 inline void print_tag(void* ptr){
   int logical_tag = ((uintptr_t) ptr) >> 56;
   void* alloc_tag= __arm_mte_get_tag(ptr);
