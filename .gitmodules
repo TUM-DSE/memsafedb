@@ -11,7 +11,7 @@
   branch = memsafedb
 [submodule "dbms/duckdb"]
 	path = dbms/duckdb
-	url = git@github.com:Meandres/duckdb.git
+	url = git@github.com:TUM-DSE/duckdb.git
   branch = memsafedb
 [submodule "dbms/redis"]
 	path = dbms/redis

@@ -70,6 +70,7 @@
       zlib
       maven
       ycsb-bin
+      lldb
     ];
   in
   {
