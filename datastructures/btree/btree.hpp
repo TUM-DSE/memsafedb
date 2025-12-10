@@ -21,7 +21,12 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <cstring>
+#ifdef MTE
 #include <mte.hpp>
+#endif
+#ifdef CHERI
+#include <cheriintrin.h>
+#endif
 
 __thread uint16_t workerThreadId = 0;
 
@@ -258,9 +263,11 @@ namespace BTree {
     #ifdef MTE
       // for now load the logical tag before returning -> TODO opti: store the tag in the upper bits of the PID
       return (Page*)__arm_mte_get_tag(virtMem+pid); 
-    #else
-      return virtMem + pid;
     #endif
+    #ifdef CHERI
+      return cheri_bounds_set_exact(virtMem+pid, pageSize);
+    #endif
+      return virtMem + pid;
     }
 
     void ensureFreePages();
@@ -587,6 +594,9 @@ namespace BTree {
     Page* ptr = virtMem + pid;
     #ifdef MTE
     ptr = (Page*)tag_pointer(ptr, pageSize);
+    #endif
+    #ifdef CHERI
+    ptr = cheri_bounds_set_exact(ptr, pageSize);
     #endif
     return ptr;
   }

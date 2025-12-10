@@ -94,12 +94,14 @@
         "ace-aarch64" = pkgs.mkShell {
           name="memsafedb-devshell-ace-hybrid";
           buildInputs = with pkgs; [
-            clang
+            pkgsStatic.clang
           ] ++ sharedPkgs;
           CLANG_HYBRID_PATH = "${doctor-pkgs.clang-morello}";
           NIX_ENFORCE_NO_NATIVE="0";
-          
+
+          # Needed to fix https://github.com/NixOS/nixpkgs/issues/177129
           shellHook = ''
+            touch /tmp/libgcc_eh.a
           '';
         };
         "ace-cheri" = pkgs.mkShell {

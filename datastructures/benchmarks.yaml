@@ -69,3 +69,13 @@ definitions:
       type: "queue_bench"
       requires: []
       args: []
+
+  extensions:
+    - name: "mte"
+      host: "eliza"
+      max_threads: 192
+      archs: ["aarch64", "mte"]
+    - name: "cheri"
+      host: "ace"
+      max_threads: 4
+      archs: ["aarch64", "cheri"]

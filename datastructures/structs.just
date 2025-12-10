@@ -63,14 +63,19 @@ clean_queue_bench:
   cd {{structs_basedir}}/queue_bench
   make clean
 
-full_build arch="aarch64": clean_ycsb clean_queue_bench (build_ycsb arch) (build_queue_bench arch)
+build_all_benchmarks arch="aarch64": clean_ycsb clean_queue_bench (build_ycsb arch) (build_queue_bench arch)
 
-full_clean: clean_all_structs clean_ycsb clean_queue_bench
+clean_all_benchmarks: clean_ycsb clean_queue_bench
 
 run_ycsb db="" workload="YCSB/workloads/workloada" threads="1" rec_count="1000000" op_count="1000000" req_distrib="zipfian" extra_args='':
-  #!/usr/bin/env bash  
-  GLIBC_TUNABLES="glibc.mem.tagging=3" {{structs_basedir}}/YCSB/ycsb -load -run -s -db {{db}} -P {{workload}} -p threadcount={{threads}} -p recordcount={{rec_count}} -p operationcount={{op_count}} -p requestdistribution={{req_distrib}} {{extra_args}}
+  #!/usr/bin/env bash
+  {{structs_basedir}}/YCSB/ycsb -load -run -s -db {{db}} -P {{workload}} -p threadcount={{threads}} -p recordcount={{rec_count}} -p operationcount={{op_count}} -p requestdistribution={{req_distrib}} {{extra_args}}
+  #GLIBC_TUNABLES="glibc.mem.tagging=3" 
 
 run_queue_bench nb_ops="100000" nb_threads="2":
   #!/usr/bin/env bash
   GLIBC_TUNABLES="glibc.mem.tagging=3" {{structs_basedir}}/queue_bench/queue_bench {{nb_ops}} {{nb_threads}}
+
+run_datastructures_benchs extensions="mte,cheri":
+  #!/usr/bin/env bash
+  python {{structs_basedir}}/execute_bench.py --extensions {{extensions}}

@@ -10,7 +10,7 @@ mod dbms 'dbms/dbms.just'
 
 build_structs arch="aarch64":
   #!/usr/bin/env bash
-  just structs::full_build {{arch}}
+  just structs::build_all_benchmarks {{arch}}
   mkdir -p {{bin_dir}}
   cp {{proot}}/datastructures/YCSB/ycsb {{bin_dir}}/ycsb_{{arch}}
   cp {{proot}}/datastructures/queue_bench/queue_bench {{bin_dir}}/queue_bench_{{arch}} 
