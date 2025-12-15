@@ -1,10 +1,11 @@
 dbms_basedir := source_dir()
 TPCH_SF := "10" # ~~2.5GB according to DuckDB website
 
-build_duckdb arch="aarch64":
+build_duckdb:
   #!/usr/bin/env bash
   cd {{dbms_basedir}}/duckdb
-  ARCH="{{arch}}" make -j release
+  ARCH="aarch64" make -j release
+  ARCH="mte" make -j release
 
 setup_duckdb sf="10":
   #!/usr/bin/env bash
@@ -14,15 +15,13 @@ setup_duckdb sf="10":
     wget https://blobs.duckdb.org/data/tpch-sf{{sf}}.db
   fi
 
-run_duckdb sf="10" mte="false":
+run_duckdb sf="10":
   #!/usr/bin/env bash
   set -eu pipefail
-  if [[ "{{mte}}" = "true" ]] then
-    export GLIBC_TUNABLES="glibc.mem.tagging=3"
-  fi
   for q in `seq 1 22`
   do
     {{dbms_basedir}}/duckdb/build/release/duckdb {{dbms_basedir}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+    GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{dbms_basedir}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
 
 build_redis:
