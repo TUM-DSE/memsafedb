@@ -15,7 +15,7 @@
   branch = memsafedb
 [submodule "dbms/redis"]
 	path = dbms/redis
-	url = git@github.com:redis/redis.git
+	url = git@github.com:TUM-DSE/redis-memsafedb.git
 [submodule "dbms/leveldb"]
 	path = dbms/leveldb
 	url = git@github.com:Meandres/leveldb.git

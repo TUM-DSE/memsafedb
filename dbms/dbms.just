@@ -27,17 +27,23 @@ run_duckdb sf="10":
 build_redis:
   #!/usr/bin/env bash
   cd {{dbms_basedir}}/redis
+  ARCH="aarch64" make -j persist-settings
+  ARCH="aarch64" make -j
+  ARCH="mte" make -j persist-settings
+  ARCH="mte" make -j
   make -j
 
 run_redis:
   #!/usr/bin/env bash
-  for l in "a b c d e f"
-  do
-    {{dbms_basedir}}/redis/src/redis-server > /dev/null 2> /dev/null &
+  for suffix in "" "-mte"; do
+    for l in a b c d e f
+    do
+      {{dbms_basedir}}/redis/src/redis-server${suffix} &> /dev/null &
 
-    ycsb.sh load redis -s -P dbms/workloads/YCSB/workload$l -p "redis.host=127.0.0.1" -p "redis.port=6379"
-    ycsb.sh run redis -s -P dbms/workloads/YCSB/workload$l -p "redis.host=127.0.0.1" -p "redis.port=6379"
+      ycsb.sh load redis -s -P {{dbms_basedir}}/workloads/YCSB/workload$l -p "redis.host=127.0.0.1" -p "redis.port=6379"
+      ycsb.sh run redis -s -P {{dbms_basedir}}/workloads/YCSB/workload$l -p "redis.host=127.0.0.1" -p "redis.port=6379"
 
-    {{dbms_basedir}}/redis/src/redis-cli shutdown
-    rm -f {{dbms_basedir}}/redis/dump.rdb
+      {{dbms_basedir}}/redis/src/redis-cli${suffix} shutdown
+      rm -f {{dbms_basedir}}/redis/dump.rdb
+    done
   done
