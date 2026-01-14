@@ -20,3 +20,7 @@
 	path = dbms/leveldb
 	url = git@github.com:TUM-DSE/leveldb-memsafedb.git
   branch = memsafedb
+[submodule "dbms/sqlite"]
+	path = dbms/sqlite
+	url = git@github.com:TUM-DSE/sqlite-memsafedb.git
+
