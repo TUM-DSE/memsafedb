@@ -47,3 +47,25 @@ run_redis:
       rm -f {{dbms_basedir}}/redis/dump.rdb
     done
   done
+
+build_leveldb:
+  #!/usr/bin/env bash
+  cd {{dbms_basedir}}/leveldb
+  cmake -S . -B build/release -DCMAKE_BUILD_TYPE=Release -DLEVELDB_BUILD_BENCHMARKS=ON -DBUILD_SHARED_LIBS=OFF -DHAVE_TCMALLOC=OFF
+  cmake --build build/release -j
+  cmake -S . -B build/release-mte -DCMAKE_BUILD_TYPE=Release -DLEVELDB_BUILD_BENCHMARKS=ON -DBUILD_SHARED_LIBS=OFF -DHAVE_TCMALLOC=OFF -DCMAKE_C_FLAGS="-march=armv8.5-a+memtag -DMTE" -DCMAKE_CXX_FLAGS="-march=armv8.5-a+memtag -DMTE"
+  cmake --build build/release-mte -j
+
+run_leveldb:
+  #!/usr/bin/env bash
+  set -eu pipefail
+  for suffix in "" "-mte"; do
+    db_path="{{dbms_basedir}}/leveldb/dbbench${suffix}"
+    rm -rf "${db_path}"
+    tunables=""
+    if [[ "${suffix}" == "-mte" ]]; then
+      tunables="glibc.mem.tagging=3"
+    fi
+    GLIBC_TUNABLES="$tunables" {{dbms_basedir}}/leveldb/build/release"${suffix}"/db_bench --db="${db_path}"
+    rm -rf "${db_path}"
+  done
