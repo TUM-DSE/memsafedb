@@ -69,3 +69,33 @@ run_leveldb:
     GLIBC_TUNABLES="$tunables" {{dbms_basedir}}/leveldb/build/release"${suffix}"/db_bench --db="${db_path}"
     rm -rf "${db_path}"
   done
+
+build_sqlite:
+  #!/usr/bin/env bash
+  cd {{dbms_basedir}}/sqlite
+  mkdir -p build/release build/release-mte
+  (
+    cd build/release
+    ../../configure CFLAGS="-O2 -DSQLITE_ENABLE_RTREE"
+    make -j sqlite3 speedtest1
+  )
+  (
+    cd build/release-mte
+    ../../configure CFLAGS="-O2 -DSQLITE_ENABLE_RTREE -march=armv8.5-a+memtag -DMTE"
+    make -j sqlite3 speedtest1
+  )
+
+run_sqlite size="100":
+  #!/usr/bin/env bash
+  set -eu pipefail
+  for suffix in "" "-mte"; do
+    db_path="{{dbms_basedir}}/sqlite/build/release${suffix}/speedtest1.db"
+    rm -f "${db_path}" "${db_path}-journal" "${db_path}-wal" "${db_path}-shm" "${db_path}-vacuum"
+    tunables=""
+    if [[ "${suffix}" == "-mte" ]]; then
+      tunables="glibc.mem.tagging=3"
+    fi
+    SQLITE_TMPDIR="/tmp" GLIBC_TUNABLES="$tunables" {{dbms_basedir}}/sqlite/build/release"${suffix}"/speedtest1 --size "{{size}}" "${db_path}"
+    rm -f "${db_path}" "${db_path}-journal" "${db_path}-wal" "${db_path}-shm" "${db_path}-vacuum"
+  done
+
