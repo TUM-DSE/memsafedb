@@ -22,8 +22,11 @@
   branch = memsafedb
 [submodule "dbms/sqlite"]
 	path = dbms/sqlite
-	url = git@github.com:TUM-DSE/sqlite-memsafedb.git
+	url = git@github.com:TUM-DSE/mysql-memsafedb.git
 
 [submodule "dbms/ladybug"]
 	path = dbms/ladybug
 	url = git@github.com:LadybugDB/ladybug.git
+[submodule "dbms/mysql"]
+	path = dbms/mysql
+	url = git@github.com:mysql/mysql-server.git
