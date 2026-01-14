@@ -24,3 +24,6 @@
 	path = dbms/sqlite
 	url = git@github.com:TUM-DSE/sqlite-memsafedb.git
 
+[submodule "dbms/ladybug"]
+	path = dbms/ladybug
+	url = git@github.com:LadybugDB/ladybug.git
