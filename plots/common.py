@@ -7,6 +7,7 @@ import seaborn as sns  # type: ignore
 from functools import reduce
 import statistics
 from scipy.stats import gmean
+from natsort import natsorted, ns
 import pandas as pd
 import os
 import numpy as np
@@ -19,11 +20,22 @@ mpl.rcParams["pdf.fonttype"] = 42
 mpl.rcParams["ps.fonttype"] = 42
 mpl.rcParams["font.family"] = "libertine"
 
+
+#mpl.rcParams.update({
+#        "text.usetex": True,
+#        "font.family": "serif",
+#        "font.serif": ["Linux Libertine O"],
+#        "text.latex.preamble": r"""
+#    \usepackage[tt=false, type1=true]{libertine}
+#    \usepackage[libertine]{newtxmath}
+#    """
+#})
+
 # 3.3 inch for single column, 7 inch for double column
 figwidth_third = 2
 figwidth_half = 3.3
 figwidth_full = 7
-fig_height = 1.4
+fig_height = 1.2
 FONTSIZE=7
 
 def format_big_numbers(x, pos):

@@ -61,10 +61,6 @@ definitions:
       type: "ycsb"
       requires: ["can_scan"]
       args: ["scanproportion=1", "updateproportion=0", "readproportion=0", "requestdistribution=uniform"]
-    - name: "readmodifywrite"
-      type: "ycsb"
-      requires: ["can_update"]
-      args: ["readmodifywriteproportion=1", "updateproportion=0", "readproportion=0", "requestdistribution=uniform"]
     - name: "queue_bench"
       type: "queue_bench"
       requires: []

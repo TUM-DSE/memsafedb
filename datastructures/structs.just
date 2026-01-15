@@ -51,6 +51,7 @@ build_ycsb arch="aarch64": clean_all_structs (build_all_structs arch)
 clean_ycsb:
   #!/usr/bin/env bash
   cd {{structs_basedir}}/YCSB
+  rm -f {{structs_basedir}}/YCSB/HdrHistogram_c/src/libhdr_histogram_static.a
   make clean
 
 build_queue_bench arch="aarch64":

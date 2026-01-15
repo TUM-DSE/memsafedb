@@ -8,6 +8,10 @@
 #endif
 
 #include <boost/atomic.hpp>
+#include <cstdlib>
+#if defined(CHERI) || defined(AARCH64_ACE)
+void* __dso_handle = nullptr;
+#endif
 struct counter {
   boost::atomic_int cnt;
   char padding[64-sizeof(boost::atomic_int)];
@@ -16,7 +20,7 @@ struct counter {
 counter* consumer_counts;
 counter* producer_counts;
 
-boost::lockfree::queue<uint64_t, boost::lockfree::fixed_sized<true>, boost::lockfree::capacity<65534>> queue;
+boost::lockfree::queue<uint64_t, boost::lockfree::fixed_sized<true>, boost::lockfree::capacity<65534>> queue_test;
 uint64_t iterations = 0;
 
 using namespace std;
@@ -25,7 +29,7 @@ using namespace std::chrono;
 void producer(int id){
   for ( int i = 0; i != iterations; ++i ) {
     int value = ++(producer_counts[id].cnt);
-    while ( !queue.push( value ) )
+    while ( !queue_test.push( value ) )
       ;
   }
 }
@@ -34,10 +38,10 @@ boost::atomic<bool> done(false);
 void consumer(int id){
   int value;
   while (!done) {
-    while (queue.pop(value))
+    while (queue_test.pop(value))
       ++(consumer_counts[id].cnt);
   }
-  while (queue.pop(value))
+  while (queue_test.pop(value))
     ++(consumer_counts[id].cnt);
 }
 

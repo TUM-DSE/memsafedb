@@ -24,13 +24,14 @@
     pkgs = import nixpkgs { inherit system; };
     oldpkgs = import oldnixpkgs { inherit system; };
     doctor-pkgs = doctor-cluster-repo.packages.${system};
+    selfpkgs = self.packages.${system};
     execo = nur-kapack.packages.${system}.execo;
     glibc-mte = pkgs.glibc.overrideAttrs (
     final: prev_:
       {
         configureFlags = prev_.configureFlags ++ [ "--enable-memory-tagging" ];
       }
-    );
+    ); 
     malloc-mte = pkgs.graphene-hardened-malloc.overrideAttrs (
       final: prev_:
       {
@@ -48,6 +49,7 @@
       scipy
       pyyaml
       tqdm
+      natsort
     ];
     sharedPkgs = with pkgs; [
       gnumake 
@@ -74,11 +76,13 @@
     ];
   in
   {
-    packages = {
+    packages = rec {
         morello-glibc = oldpkgs.glibc.override { src=pkgs.fetchurl; };
         hardened-malloc = pkgs.graphene-hardened-malloc;
         malloc-mte = malloc-mte;
         glibc-mte = glibc-mte;
+        binutils-morello = pkgs.callPackage ./nix/binutils.nix {};
+        gcc-morello = pkgs.callPackage ./nix/gcc.nix { inherit binutils-morello; };
         ycsb-bin = pkgs.callPackage ./nix/ycsb.nix {};
       };
       devShells = {
@@ -92,12 +96,30 @@
           MTE_MALLOC= "${malloc-mte}/lib/libhardened_malloc.so";
           NIX_ENFORCE_NO_NATIVE="0";
         };
+        "cross-compiler" = pkgs.mkShell {
+          name="memsafedb-devshell-eliza-crosscompiler";
+          buildInputs = with pkgs; [
+            doctor-pkgs.clang-morello
+            doctor-pkgs.musl-morello-purecap
+            doctor-pkgs.llvm-morello-purecap
+          ] ++ sharedPkgs;
+          MORELLO_CLANG_DIR = "${doctor-pkgs.clang-morello}";
+          MORELLO_LLVM_DIR = "${doctor-pkgs.llvm-morello-purecap}";
+          MORELLO_SYSROOT = "${doctor-pkgs.musl-morello-purecap}";
+        };
         "ace-aarch64" = pkgs.mkShell {
           name="memsafedb-devshell-ace-hybrid";
           buildInputs = with pkgs; [
             pkgsStatic.clang
+            pkgsStatic.musl
+            pkgsStatic.libcxx
+            pkgsStatic.libcxx.dev
+            pkgsStatic.boost
           ] ++ sharedPkgs;
-          CLANG_HYBRID_PATH = "${doctor-pkgs.clang-morello}";
+          CLANG_PATH = "${pkgs.pkgsStatic.clang}";
+          MUSL_PATH = "${pkgs.pkgsStatic.musl}";
+          LIBCXX_PATH = "${pkgs.pkgsStatic.libcxx}";
+          LIBCXX_HDR = "${pkgs.pkgsStatic.libcxx.dev}";
           NIX_ENFORCE_NO_NATIVE="0";
 
           # Needed to fix https://github.com/NixOS/nixpkgs/issues/177129
