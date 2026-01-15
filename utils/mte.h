@@ -29,11 +29,11 @@ inline void* tag_memory_region(void* ptr, size_t size){
     perror("non aligned tagging");
   }
   assert(size % 16 == 0);
-  __asm__ volatile("irg %0, %1" : "+r" (ptr) : );
+  __asm__ volatile("irg %0, %0" : "+r" (ptr) : );
   void *end = (char*) ptr + size;
   void *ret = ptr;
   while (ptr < end) {
-    __asm__ volatile("stg %0, [%1], #16" : "+r"(ptr) : : "memory");
+    __asm__ volatile("stg %0, [%0], #16" : "+r"(ptr) : : "memory");
   }
   return ret;
 }
@@ -45,7 +45,7 @@ inline void* tag_and_zero_memory_region(void* ptr, size_t size){
   void *end = (char*) ptr + size;
   void *ret = ptr;
   while (ptr < end) {
-    __asm__ volatile("stzg %0, [%1], #16" : "+r"(ptr) : : "memory");
+    __asm__ volatile("stzg %0, [%0], #16" : "+r"(ptr) : : "memory");
   }
   return ret;
 }
