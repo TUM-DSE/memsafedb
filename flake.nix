@@ -50,6 +50,7 @@
       pyyaml
       tqdm
       natsort
+      psutil
     ];
     sharedPkgs = with pkgs; [
       gnumake 

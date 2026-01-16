@@ -109,3 +109,37 @@ run_sqlite size="100":
     rm -f "${db_path}" "${db_path}-journal" "${db_path}-wal" "${db_path}-shm" "${db_path}-vacuum"
   done
 
+build_ladybug:
+  #!/usr/bin/env bash
+  cd {{dbms_basedir}}/ladybug
+  ARCH=aarch64 make -j release
+  ARCH=aarch64 make -j python
+  ARCH=mte make -j release
+  ARCH=mte make -j python
+
+run_ladybug threads="":
+  #!/usr/bin/env bash
+  set -eu pipefail
+  dataset_dir="{{dbms_basedir}}/ladybug/dataset/lsqb-sf01"
+  csv_root="{{dbms_basedir}}/ladybug/build/lsqb-data"
+  mkdir -p "${csv_root}/lsqb-datasets"
+  ln -sfn "${dataset_dir}" "${csv_root}/lsqb-datasets/social-network-sf0.1-projected-fk"
+  export CSV_DIR="${csv_root}"
+  export SCALE_FACTOR="0.1"
+  if [[ -n "{{threads}}" ]]; then
+    export NUM_THREADS="{{threads}}"
+  fi
+  for suffix in "" "-mte"; do
+    tunables=""
+    if [[ "${suffix}" == "-mte" ]]; then
+      tunables="glibc.mem.tagging=3"
+    fi
+    build_root="{{dbms_basedir}}/ladybug/build${suffix}"
+    serialized_root="${build_root}/lsqb-serialized"
+    rm -rf "${serialized_root}"
+    mkdir -p "${serialized_root}"
+    export SERIALIZED_DIR="${serialized_root}"
+    PYTHONPATH="{{dbms_basedir}}/ladybug/tools/python_api/tools/python_api/build${suffix}:${PYTHONPATH:-}" GLIBC_TUNABLES="${tunables}" \
+      python3 {{dbms_basedir}}/ladybug/benchmark/lsqb/benchmark_runner.py
+    rm lsqb.log
+  done
