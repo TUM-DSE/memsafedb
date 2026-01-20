@@ -1,7 +1,7 @@
 dbms_basedir := source_dir()
 TPCH_SF := "10" # ~~2.5GB according to DuckDB website
 
-build_duckdb:
+build_duckdb arch="aarch64":
   #!/usr/bin/env bash
   cd {{dbms_basedir}}/duckdb
   if [[ "{{arch}}" = "cheri" ]] then
@@ -142,4 +142,103 @@ run_ladybug threads="":
     PYTHONPATH="{{dbms_basedir}}/ladybug/tools/python_api/tools/python_api/build${suffix}:${PYTHONPATH:-}" GLIBC_TUNABLES="${tunables}" \
       python3 {{dbms_basedir}}/ladybug/benchmark/lsqb/benchmark_runner.py
     rm lsqb.log
+  done
+
+build_mysql:
+  #!/usr/bin/env bash
+  cd {{dbms_basedir}}/mysql
+  cmake -S . -B build/release -DCMAKE_BUILD_TYPE=Release
+  cmake --build build/release -j
+  cmake -S . -B build/release-mte -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_FLAGS="-march=armv8.5-a+memtag -DMTE -isystem {{dbms_basedir}}/../utils" -DCMAKE_CXX_FLAGS="-march=armv8.5-a+memtag -DMTE -isystem {{dbms_basedir}}/../utils"
+  cmake --build build/release-mte -j
+
+run_mysql:
+  #!/usr/bin/env bash
+  set -euo pipefail
+
+  # Sysbench config
+  sysbench_bin="${SYSBENCH_BIN:-sysbench}"
+  sysbench_path="${SYSBENCH_PATH:-/usr}"
+  oltp_script="${SYSBENCH_OLTP_SCRIPT:-${sysbench_path}/share/sysbench/oltp_read_write.lua}"
+
+  command -v "${sysbench_bin}" >/dev/null 2>&1 || { echo "sysbench not found" >&2; exit 1; }
+  [[ -f "${oltp_script}" ]] || { echo "OLTP script not found: ${oltp_script}" >&2; exit 1; }
+
+  # Benchmark parameters
+  port="${MYSQL_PORT:-3307}"
+  db="${MYSQL_DB:-sbtest}"
+  user="${MYSQL_USER:-root}"
+  pass="${MYSQL_PASS:-}"
+  table_size="${OLTP_TABLE_SIZE:-10000}"
+  tables="${OLTP_TABLES:-1}"
+  threads="${OLTP_THREADS:-4}"
+  duration="${OLTP_DURATION:-60}"
+  report_interval="${OLTP_REPORT_INTERVAL:-10}"
+
+  for suffix in "" "-mte"; do
+    build_root="{{dbms_basedir}}/mysql/build/release${suffix}"
+    run_root="{{dbms_basedir}}/mysql/build/run${suffix}"
+    data_dir="${run_root}/data"
+    pid_path="${run_root}/mysqld.pid"
+    log_path="${run_root}/mysqld.log"
+
+    mysql_cmd="${build_root}/bin/mysql --protocol=tcp --port=${port} --user=${user}"
+    mysqladmin_cmd="${build_root}/bin/mysqladmin --protocol=tcp --port=${port} --user=${user}"
+
+    sysbench_opts="--db-driver=mysql --mysql-host=127.0.0.1 --mysql-port=${port}"
+    sysbench_opts+=" --mysql-user=${user} --mysql-password=${pass} --mysql-db=${db}"
+    sysbench_opts+=" --tables=${tables} --table-size=${table_size}"
+
+    # Cleanup any previous instance
+    [[ -f "${pid_path}" ]] && ${mysqladmin_cmd} shutdown &>/dev/null || true
+    rm -rf "${data_dir}"
+    mkdir -p "${data_dir}"
+
+    tunables=""
+    [[ "${suffix}" == "-mte" ]] && tunables="glibc.mem.tagging=3"
+
+    # Initialize and start MySQL
+    GLIBC_TUNABLES="${tunables}" "${build_root}/bin/mysqld" \
+      --initialize-insecure \
+      --basedir="${build_root}" \
+      --datadir="${data_dir}" \
+      --lc-messages-dir="${build_root}/share" \
+      --plugin-dir="${build_root}/lib/plugin" \
+      --log-error="${log_path}"
+
+    GLIBC_TUNABLES="${tunables}" "${build_root}/bin/mysqld" \
+      --basedir="${build_root}" \
+      --datadir="${data_dir}" \
+      --socket="${run_root}/mysql.sock" \
+      --pid-file="${pid_path}" \
+      --port="${port}" \
+      --bind-address=127.0.0.1 \
+      --plugin-dir="${build_root}/lib/plugin" \
+      --log-error="${log_path}" &>"${log_path}" &
+    mysqld_pid=$!
+
+    trap 'echo "Terminated, stopping mysql"; ${mysqladmin_cmd} shutdown &>/dev/null || kill ${mysqld_pid} &>/dev/null || true' EXIT
+
+    # Wait for MySQL to be ready
+    for _ in {1..50}; do
+      ${mysqladmin_cmd} ping &>/dev/null && break
+      sleep 0.2
+    done
+
+    # Run benchmark
+    ${mysql_cmd} -e "DROP DATABASE IF EXISTS ${db}; CREATE DATABASE ${db};"
+
+    ${sysbench_bin} ${oltp_script} ${sysbench_opts} prepare
+
+    ${sysbench_bin} ${oltp_script} ${sysbench_opts} \
+      --threads="${threads}" \
+      --time="${duration}" \
+      --report-interval="${report_interval}" \
+      --mysql-ignore-errors=1213 \
+      run
+
+    ${sysbench_bin} ${oltp_script} ${sysbench_opts} cleanup
+
+    ${mysqladmin_cmd} shutdown
+    trap - EXIT
   done
