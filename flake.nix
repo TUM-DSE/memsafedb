@@ -41,6 +41,7 @@
       }
     );
     ycsb-bin = pkgs.callPackage ./nix/ycsb.nix {};
+    py-tpcc = pkgs.callPackage ./nix/py-tpcc {};
     python-pkgs = with pkgs.python3Packages; [
       execo
       requests
@@ -74,6 +75,7 @@
       zlib
       maven
       ycsb-bin
+      py-tpcc
       lldb
       openssl
       libtirpc
@@ -92,6 +94,7 @@
         binutils-morello = pkgs.callPackage ./nix/binutils.nix {};
         gcc-morello = pkgs.callPackage ./nix/gcc.nix { inherit binutils-morello; };
         ycsb-bin = pkgs.callPackage ./nix/ycsb.nix {};
+        py-tpcc = pkgs.callPackage ./nix/py-tpcc {};
       };
       devShells = {
         "eliza" = pkgs.mkShell {

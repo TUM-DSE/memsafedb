@@ -1,6 +1,9 @@
 dbms_basedir := source_dir()
 TPCH_SF := "10" # ~~2.5GB according to DuckDB website
 
+help:
+  just -l dbms
+
 build_duckdb arch="aarch64":
   #!/usr/bin/env bash
   cd {{dbms_basedir}}/duckdb
@@ -20,6 +23,7 @@ setup_duckdb sf="10":
     wget https://blobs.duckdb.org/data/tpch-sf{{sf}}.db
   fi
 
+# Run TPC-H for duckdb
 run_duckdb sf="10":
   #!/usr/bin/env bash
   set -eu pipefail
@@ -43,6 +47,7 @@ build_redis:
   ARCH="mte" make -j
   make -j
 
+# Run YCSB for redis
 run_redis:
   #!/usr/bin/env bash
   for suffix in "" "-mte"; do
@@ -66,6 +71,7 @@ build_leveldb:
   cmake -S . -B build/release-mte -DCMAKE_BUILD_TYPE=Release -DLEVELDB_BUILD_BENCHMARKS=ON -DBUILD_SHARED_LIBS=OFF -DHAVE_TCMALLOC=OFF -DCMAKE_C_FLAGS="-march=armv8.5-a+memtag -DMTE" -DCMAKE_CXX_FLAGS="-march=armv8.5-a+memtag -DMTE"
   cmake --build build/release-mte -j
 
+# Run leveldb db_bench
 run_leveldb:
   #!/usr/bin/env bash
   set -eu pipefail
@@ -87,15 +93,16 @@ build_sqlite:
   (
     cd build/release
     ../../configure CFLAGS="-O2 -DSQLITE_ENABLE_RTREE"
-    make -j sqlite3 speedtest1
+    make -j sqlite3 speedtest1 libsqlite3.so
   )
   (
     cd build/release-mte
     ../../configure CFLAGS="-O2 -DSQLITE_ENABLE_RTREE -march=armv8.5-a+memtag -DMTE"
-    make -j sqlite3 speedtest1
+    make -j sqlite3 speedtest1 libsqlite3.so
   )
 
-run_sqlite size="100":
+# Run the sqlite speedtest1
+run_sqlite_speedtest size="100":
   #!/usr/bin/env bash
   set -eu pipefail
   for suffix in "" "-mte"; do
@@ -107,6 +114,55 @@ run_sqlite size="100":
     fi
     SQLITE_TMPDIR="/tmp" GLIBC_TUNABLES="$tunables" {{dbms_basedir}}/sqlite/build/release"${suffix}"/speedtest1 --size "{{size}}" "${db_path}"
     rm -f "${db_path}" "${db_path}-journal" "${db_path}-wal" "${db_path}-shm" "${db_path}-vacuum"
+  done
+
+# Run TPC-C for sqlite
+run_sqlite warehouses="1" duration="60" clients="1":
+  #!/usr/bin/env bash
+  set -euo pipefail
+
+  ddl_path="{{dbms_basedir}}/sqlite/tpcc.sql"
+
+  # Copy DDL file if not present
+  if [[ ! -f "${ddl_path}" ]]; then
+    cp "$(dirname "$(which py-tpcc)")/../lib/py-tpcc/tpcc.sql" "${ddl_path}"
+  fi
+
+  for suffix in "" "-mte"; do
+    run_root="{{dbms_basedir}}/sqlite/build/release${suffix}"
+    db_path="${run_root}/tpcc.db"
+    config_path="${run_root}/tpcc.config"
+
+    # Cleanup previous run
+    rm -f "${db_path}" "${db_path}-journal" "${db_path}-wal" "${db_path}-shm"
+    rm -f "${run_root}/results.log"
+
+    tunables=""
+    preload="${run_root}/libsqlite3.so"
+    if [[ "${suffix}" == "-mte" ]]; then
+      tunables="glibc.mem.tagging=3"
+      preload="${run_root}/libsqlite3.so:${MTE_MALLOC}"
+    fi
+
+    # Create config file
+    printf "[sqlite]\ndatabase = ${db_path}\n" > "${config_path}"
+
+    # Ensure we use the correct sqlite3 binary and library
+    export PATH="${run_root}:${PATH}"
+    export LD_PRELOAD="${preload}"
+
+    # Run TPC-C benchmark
+    cd "${run_root}"
+    GLIBC_TUNABLES="${tunables}" py-tpcc \
+      --warehouses "{{warehouses}}" \
+      --duration "{{duration}}" \
+      --clients "{{clients}}" \
+      --ddl "${ddl_path}" \
+      --config "${config_path}" \
+      sqlite
+
+    # Cleanup
+    rm -f "${db_path}" "${db_path}-journal" "${db_path}-wal" "${db_path}-shm"
   done
 
 build_ladybug:
@@ -152,6 +208,7 @@ build_mysql:
   cmake -S . -B build/release-mte -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_FLAGS="-march=armv8.5-a+memtag -DMTE -isystem {{dbms_basedir}}/../utils" -DCMAKE_CXX_FLAGS="-march=armv8.5-a+memtag -DMTE -isystem {{dbms_basedir}}/../utils"
   cmake --build build/release-mte -j
 
+# Run TPC-C for mysql
 run_mysql:
   #!/usr/bin/env bash
   set -euo pipefail
