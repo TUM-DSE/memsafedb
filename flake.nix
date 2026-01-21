@@ -83,6 +83,7 @@
       mysql_jdbc
       unixtools.netstat
       sysbench
+      snappy
     ];
   in
   {

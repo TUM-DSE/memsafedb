@@ -65,14 +65,30 @@ run_redis:
 
 build_leveldb:
   #!/usr/bin/env bash
+  set -euo pipefail
   cd {{dbms_basedir}}/leveldb
+
+  # Build LevelDB (release and MTE variants)
   cmake -S . -B build/release -DCMAKE_BUILD_TYPE=Release -DLEVELDB_BUILD_BENCHMARKS=ON -DBUILD_SHARED_LIBS=OFF -DHAVE_TCMALLOC=OFF
   cmake --build build/release -j
   cmake -S . -B build/release-mte -DCMAKE_BUILD_TYPE=Release -DLEVELDB_BUILD_BENCHMARKS=ON -DBUILD_SHARED_LIBS=OFF -DHAVE_TCMALLOC=OFF -DCMAKE_C_FLAGS="-march=armv8.5-a+memtag -DMTE" -DCMAKE_CXX_FLAGS="-march=armv8.5-a+memtag -DMTE"
   cmake --build build/release-mte -j
 
+  # Build YCSB-cpp for LevelDB (linked against both variants)
+  cd {{dbms_basedir}}/ycsb-cpp
+
+  make BIND_LEVELDB=1 \
+    EXTRA_CXXFLAGS="-I{{dbms_basedir}}/leveldb/include" \
+    EXTRA_LDFLAGS="-L{{dbms_basedir}}/leveldb/build/release -lsnappy"
+  cp ycsb {{dbms_basedir}}/leveldb/build/release/ycsb
+
+  make BIND_LEVELDB=1 \
+    EXTRA_CXXFLAGS="-I{{dbms_basedir}}/leveldb/include" \
+    EXTRA_LDFLAGS="-L{{dbms_basedir}}/leveldb/build/release-mte -lsnappy"
+  cp ycsb {{dbms_basedir}}/leveldb/build/release-mte/ycsb
+
 # Run leveldb db_bench
-run_leveldb:
+run_leveldb_bench:
   #!/usr/bin/env bash
   set -eu pipefail
   for suffix in "" "-mte"; do
@@ -84,6 +100,54 @@ run_leveldb:
     fi
     GLIBC_TUNABLES="$tunables" {{dbms_basedir}}/leveldb/build/release"${suffix}"/db_bench --db="${db_path}"
     rm -rf "${db_path}"
+  done
+
+# Run YCSB workloads against LevelDB
+run_leveldb recordcount="100000" operationcount="100000" threads="1":
+  #!/usr/bin/env bash
+  set -euo pipefail
+
+  ycsb_dir="{{dbms_basedir}}/ycsb-cpp"
+  workloads_dir="${ycsb_dir}/workloads"
+  leveldb_props="${ycsb_dir}/leveldb/leveldb.properties"
+
+  for suffix in "" "-mte"; do
+    build_root="{{dbms_basedir}}/leveldb/build/release${suffix}"
+    ycsb_bin="${build_root}/ycsb"
+    db_path="${build_root}/ycsb-leveldb"
+
+    tunables=""
+    preload=""
+    if [[ "${suffix}" == "-mte" ]]; then
+      tunables="glibc.mem.tagging=3"
+      preload="${MTE_MALLOC}"
+    fi
+
+    for workload in a b c d e f; do
+      echo "=== Running workload${workload} (${suffix:-release}) ==="
+      rm -rf "${db_path}"
+
+      # Load phase
+      LD_PRELOAD="${preload}" GLIBC_TUNABLES="${tunables}" "${ycsb_bin}" -load -db leveldb \
+        -P "${workloads_dir}/workload${workload}" \
+        -P "${leveldb_props}" \
+        -p leveldb.dbname="${db_path}" \
+        -p leveldb.destroy=true \
+        -p recordcount="{{recordcount}}" \
+        -p threadcount="{{threads}}" \
+        -s
+
+      # Run phase
+      LD_PRELOAD="${preload}" GLIBC_TUNABLES="${tunables}" "${ycsb_bin}" -run -db leveldb \
+        -P "${workloads_dir}/workload${workload}" \
+        -P "${leveldb_props}" \
+        -p leveldb.dbname="${db_path}" \
+        -p operationcount="{{operationcount}}" \
+        -p threadcount="{{threads}}" \
+        -s
+
+      rm -rf "${db_path}"
+    done
   done
 
 build_sqlite:
