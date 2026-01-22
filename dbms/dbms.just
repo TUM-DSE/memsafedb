@@ -4,6 +4,14 @@ TPCH_SF := "10" # ~~2.5GB according to DuckDB website
 help:
   just -l dbms
 
+# Run benchmarks and collect results to CSV
+benchmark db="all" repetitions="1":
+  python3 {{dbms_basedir}}/benchmark/run_benchmarks.py --db "{{db}}" --repetitions "{{repetitions}}"
+
+# Generate plots from results
+plot:
+  python3 {{dbms_basedir}}/../plots/dbms.py
+
 build_duckdb arch="aarch64":
   #!/usr/bin/env bash
   cd {{dbms_basedir}}/duckdb
@@ -297,6 +305,9 @@ run_mysql:
   report_interval="${OLTP_REPORT_INTERVAL:-10}"
 
   for suffix in "" "-mte"; do
+    label="release"
+    [[ "${suffix}" == "-mte" ]] && label="release-mte"
+    echo "=== Running mysql (${label}) ==="
     build_root="{{dbms_basedir}}/mysql/build/release${suffix}"
     run_root="{{dbms_basedir}}/mysql/build/run${suffix}"
     data_dir="${run_root}/data"
