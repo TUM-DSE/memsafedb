@@ -23,7 +23,7 @@ build_duckdb arch="aarch64":
     ARCH="{{arch}}" make -j release
   fi
 
-setup_duckdb sf="10":
+setup_duckdb sf="100":
   #!/usr/bin/env bash
   # Note: this only works for 1, 3, 10, 30, 100, 300, 1000 and 3000 (refer to https://duckdb.org/docs/stable/core_extensions/tpch#pre-generated-datasets)
   # otherwise we need to generate them ourselves
@@ -32,12 +32,28 @@ setup_duckdb sf="10":
   fi
 
 # Run TPC-H for duckdb
-run_duckdb sf="10":
+run_duckdb sf="100":
   #!/usr/bin/env bash
   set -eu pipefail
+
+  # Warmup phase - run all queries once to load OS cache
+  echo "=== Warmup phase ===" >&2
+  for q in `seq 1 22`
+  do
+    {{dbms_basedir}}/duckdb/build/release/duckdb {{dbms_basedir}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" &> /dev/null
+  done
+
+  # Run all release queries
+  echo "=== Running release variant ===" >&2
   for q in `seq 1 22`
   do
     {{dbms_basedir}}/duckdb/build/release/duckdb {{dbms_basedir}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+  done
+
+  # Run all MTE queries
+  echo "=== Running release-mte variant ===" >&2
+  for q in `seq 1 22`
+  do
     GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{dbms_basedir}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
 

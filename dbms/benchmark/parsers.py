@@ -7,48 +7,62 @@ from typing import Iterator
 def parse_duckdb_output(output: str, repetition: int) -> Iterator[dict]:
     """Parse DuckDB TPC-H output.
 
-    Output format from run_duckdb is pairs of lines per query:
+    Output format from run_duckdb: all release queries, then all MTE queries:
     q1,1.234  (release)
-    q1,1.456  (release-mte)
     q2,2.345  (release)
+    ...
+    q22,0.163 (release)
+    q1,1.456  (release-mte)
     q2,2.567  (release-mte)
     ...
+    q22,0.124 (release-mte)
     """
     lines = [line.strip() for line in output.strip().split('\n') if line.strip()]
 
-    for i in range(0, len(lines), 2):
-        if i + 1 >= len(lines):
-            break
+    # Filter lines to only those matching the query format
+    query_lines = []
+    for line in lines:
+        if re.match(r'q\d+,[\d.]+', line):
+            query_lines.append(line)
 
-        release_line = lines[i]
-        mte_line = lines[i + 1]
+    # Split into two halves: first half is release, second half is mte
+    if len(query_lines) < 2:
+        return
 
-        # Parse q#,seconds format
-        release_match = re.match(r'(q\d+),([\d.]+)', release_line)
-        mte_match = re.match(r'(q\d+),([\d.]+)', mte_line)
+    mid = len(query_lines) // 2
+    release_lines = query_lines[:mid]
+    mte_lines = query_lines[mid:]
 
-        if release_match and mte_match:
-            query = release_match.group(1)
-            release_time = float(release_match.group(2))
-            mte_time = float(mte_match.group(2))
-
+    # Parse release queries
+    for line in release_lines:
+        match = re.match(r'(q\d+),([\d.]+)', line)
+        if match:
+            query = match.group(1)
+            query_time = float(match.group(2))
             yield {
                 'database': 'duckdb',
                 'variant': 'release',
                 'benchmark': 'tpch',
                 'workload': query,
                 'metric_name': 'query_time',
-                'metric_value': release_time,
+                'metric_value': query_time,
                 'unit': 'seconds',
                 'repetition': repetition,
             }
+
+    # Parse MTE queries
+    for line in mte_lines:
+        match = re.match(r'(q\d+),([\d.]+)', line)
+        if match:
+            query = match.group(1)
+            query_time = float(match.group(2))
             yield {
                 'database': 'duckdb',
                 'variant': 'release-mte',
                 'benchmark': 'tpch',
                 'workload': query,
                 'metric_name': 'query_time',
-                'metric_value': mte_time,
+                'metric_value': query_time,
                 'unit': 'seconds',
                 'repetition': repetition,
             }
