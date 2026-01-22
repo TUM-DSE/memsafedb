@@ -77,7 +77,7 @@ build_leveldb:
   cd {{dbms_basedir}}/leveldb
 
   # Build LevelDB (release and MTE variants)
-  cmake -S . -B build/release -DCMAKE_BUILD_TYPE=Release -DLEVELDB_BUILD_BENCHMARKS=ON -DBUILD_SHARED_LIBS=OFF -DHAVE_TCMALLOC=OFF
+  cmake -S . -B build/release -DCMAKE_BUILD_TYPE=Release -DLEVELDB_BUILD_BENCHMARKS=ON -DBUILD_SHARED_LIBS=OFF -DHAVE_TCMALLOC=OFF -DCMAKE_C_FLAGS="-march=armv8.5-a" -DCMAKE_CXX_FLAGS="-march=armv8.5-a"
   cmake --build build/release -j
   cmake -S . -B build/release-mte -DCMAKE_BUILD_TYPE=Release -DLEVELDB_BUILD_BENCHMARKS=ON -DBUILD_SHARED_LIBS=OFF -DHAVE_TCMALLOC=OFF -DCMAKE_C_FLAGS="-march=armv8.5-a+memtag -DMTE" -DCMAKE_CXX_FLAGS="-march=armv8.5-a+memtag -DMTE"
   cmake --build build/release-mte -j
@@ -164,7 +164,7 @@ build_sqlite:
   mkdir -p build/release build/release-mte
   (
     cd build/release
-    ../../configure CFLAGS="-O2 -DSQLITE_ENABLE_RTREE"
+    ../../configure CFLAGS="-O2 -DSQLITE_ENABLE_RTREE -march=armv8.5-a"
     make -j sqlite3 speedtest1 libsqlite3.so
   )
   (
@@ -275,9 +275,9 @@ run_ladybug threads="":
 build_mysql:
   #!/usr/bin/env bash
   cd {{dbms_basedir}}/mysql
-  cmake -S . -B build/release -DCMAKE_BUILD_TYPE=Release
+  cmake -S . -B build/release -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS="-march=armv8.5-a" -DCMAKE_CXX_FLAGS="-march=armv8.5-a"
   cmake --build build/release -j
-  cmake -S . -B build/release-mte -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_FLAGS="-march=armv8.5-a+memtag -DMTE -isystem {{dbms_basedir}}/../utils" -DCMAKE_CXX_FLAGS="-march=armv8.5-a+memtag -DMTE -isystem {{dbms_basedir}}/../utils"
+  cmake -S . -B build/release-mte -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS="-march=armv8.5-a+memtag -DMTE -isystem {{dbms_basedir}}/../utils" -DCMAKE_CXX_FLAGS="-march=armv8.5-a+memtag -DMTE -isystem {{dbms_basedir}}/../utils"
   cmake --build build/release-mte -j
 
 # Run TPC-C for mysql
