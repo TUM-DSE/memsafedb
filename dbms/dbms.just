@@ -43,17 +43,33 @@ run_duckdb sf="100":
     {{dbms_basedir}}/duckdb/build/release/duckdb {{dbms_basedir}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" &> /dev/null
   done
 
-  # Run all release queries
+  # Run all release queries (warm cache)
   echo "=== Running release variant ===" >&2
   for q in `seq 1 22`
   do
     {{dbms_basedir}}/duckdb/build/release/duckdb {{dbms_basedir}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
 
-  # Run all MTE queries
+  # Run all MTE queries (warm cache)
   echo "=== Running release-mte variant ===" >&2
   for q in `seq 1 22`
   do
+    GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{dbms_basedir}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+  done
+
+  # Run all release queries (cold cache - drop caches before each query)
+  echo "=== Running release-cold variant ===" >&2
+  for q in `seq 1 22`
+  do
+    echo 1 | sudo tee /proc/sys/vm/drop_caches > /dev/null
+    {{dbms_basedir}}/duckdb/build/release/duckdb {{dbms_basedir}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+  done
+
+  # Run all MTE queries (cold cache - drop caches before each query)
+  echo "=== Running release-mte-cold variant ===" >&2
+  for q in `seq 1 22`
+  do
+    echo 1 | sudo tee /proc/sys/vm/drop_caches > /dev/null
     GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{dbms_basedir}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
 

@@ -7,15 +7,21 @@ from typing import Iterator
 def parse_duckdb_output(output: str, repetition: int) -> Iterator[dict]:
     """Parse DuckDB TPC-H output.
 
-    Output format from run_duckdb: all release queries, then all MTE queries:
-    q1,1.234  (release)
-    q2,2.345  (release)
+    Output format from run_duckdb: all release, all mte, all release-cold, all mte-cold:
+    q1,1.234  (release warm)
+    q2,2.345  (release warm)
     ...
-    q22,0.163 (release)
-    q1,1.456  (release-mte)
-    q2,2.567  (release-mte)
+    q22,0.163 (release warm)
+    q1,1.456  (release-mte warm)
+    q2,2.567  (release-mte warm)
     ...
-    q22,0.124 (release-mte)
+    q22,0.124 (release-mte warm)
+    q1,1.789  (release-cold)
+    ...
+    q22,0.999 (release-cold)
+    q1,1.888  (release-mte-cold)
+    ...
+    q22,0.777 (release-mte-cold)
     """
     lines = [line.strip() for line in output.strip().split('\n') if line.strip()]
 
@@ -25,15 +31,17 @@ def parse_duckdb_output(output: str, repetition: int) -> Iterator[dict]:
         if re.match(r'q\d+,[\d.]+', line):
             query_lines.append(line)
 
-    # Split into two halves: first half is release, second half is mte
-    if len(query_lines) < 2:
+    # Split into four quarters: release, mte, release-cold, mte-cold
+    if len(query_lines) < 4:
         return
 
-    mid = len(query_lines) // 2
-    release_lines = query_lines[:mid]
-    mte_lines = query_lines[mid:]
+    quarter = len(query_lines) // 4
+    release_lines = query_lines[:quarter]
+    mte_lines = query_lines[quarter:quarter*2]
+    release_cold_lines = query_lines[quarter*2:quarter*3]
+    mte_cold_lines = query_lines[quarter*3:]
 
-    # Parse release queries
+    # Parse release queries (warm cache)
     for line in release_lines:
         match = re.match(r'(q\d+),([\d.]+)', line)
         if match:
@@ -50,7 +58,7 @@ def parse_duckdb_output(output: str, repetition: int) -> Iterator[dict]:
                 'repetition': repetition,
             }
 
-    # Parse MTE queries
+    # Parse MTE queries (warm cache)
     for line in mte_lines:
         match = re.match(r'(q\d+),([\d.]+)', line)
         if match:
@@ -59,6 +67,40 @@ def parse_duckdb_output(output: str, repetition: int) -> Iterator[dict]:
             yield {
                 'database': 'duckdb',
                 'variant': 'release-mte',
+                'benchmark': 'tpch',
+                'workload': query,
+                'metric_name': 'query_time',
+                'metric_value': query_time,
+                'unit': 'seconds',
+                'repetition': repetition,
+            }
+
+    # Parse release queries (cold cache)
+    for line in release_cold_lines:
+        match = re.match(r'(q\d+),([\d.]+)', line)
+        if match:
+            query = match.group(1)
+            query_time = float(match.group(2))
+            yield {
+                'database': 'duckdb',
+                'variant': 'release-cold',
+                'benchmark': 'tpch',
+                'workload': query,
+                'metric_name': 'query_time',
+                'metric_value': query_time,
+                'unit': 'seconds',
+                'repetition': repetition,
+            }
+
+    # Parse MTE queries (cold cache)
+    for line in mte_cold_lines:
+        match = re.match(r'(q\d+),([\d.]+)', line)
+        if match:
+            query = match.group(1)
+            query_time = float(match.group(2))
+            yield {
+                'database': 'duckdb',
+                'variant': 'release-mte-cold',
                 'benchmark': 'tpch',
                 'workload': query,
                 'metric_name': 'query_time',

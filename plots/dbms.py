@@ -111,17 +111,171 @@ def plot_grouped_bars(
 
 
 def plot_duckdb_tpch(df: pd.DataFrame):
-    """Plot DuckDB TPC-H query times."""
-    plot_grouped_bars(
-        df,
-        database='duckdb',
-        benchmark='tpch',
-        metric='query_time',
-        ylabel='Query Time (s)',
-        filename='dbms_duckdb_tpch.pdf',
-        figsize=(figwidth_full, fig_height * 1.5),
-        higher_is_better=False,
+    """Plot DuckDB TPC-H query times (warm cache)."""
+    # Filter to only warm cache variants (release and release-mte)
+    data = df[
+        (df['database'] == 'duckdb') &
+        (df['benchmark'] == 'tpch') &
+        (df['metric_name'] == 'query_time') &
+        (df['variant'].isin(['release', 'release-mte']))
+    ]
+
+    if data.empty:
+        print("No data for duckdb/tpch/query_time (warm cache)")
+        return
+
+    figsize = (figwidth_full, fig_height * 1.5)
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Pivot to get release vs release-mte side by side
+    pivot = data.pivot_table(
+        index='workload',
+        columns='variant',
+        values='metric_value',
+        aggfunc='mean'
     )
+
+    # Sort workloads naturally (q1, q2, ... q10, q11, etc.)
+    pivot = pivot.reindex(natsorted(pivot.index, alg=ns.NUMAFTER))
+
+    x = np.arange(len(pivot))
+    width = 0.35
+
+    # Get column names dynamically
+    variants = pivot.columns.tolist()
+    baseline_var = 'release' if 'release' in variants else variants[0]
+    mte_var = 'release-mte' if 'release-mte' in variants else variants[-1]
+
+    bars1 = ax.bar(
+        x - width / 2,
+        pivot[baseline_var],
+        width,
+        label='Baseline',
+        color=baseline_color,
+        edgecolor='black',
+        hatch=baseline_hatch,
+    )
+    bars2 = ax.bar(
+        x + width / 2,
+        pivot[mte_var],
+        width,
+        label='MTE',
+        color=sys_color,
+        edgecolor='black',
+        hatch=sys_hatch,
+    )
+
+    ax.set_ylabel('Query Time (s)', fontsize=FONTSIZE)
+    ax.set_xticks(x)
+    ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
+    ax.tick_params(axis='x', labelrotation=45)
+
+    ax.legend(fontsize=FONTSIZE - 1, loc='upper right')
+
+    # Add better/worse indicator
+    ax.annotate(
+        lower_better_str,
+        color='blue',
+        xy=(0.02, 0.92),
+        xycoords='axes fraction',
+        fontsize=FONTSIZE - 1,
+    )
+
+    # Format y-axis for large numbers
+    ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers))
+
+    plt.tight_layout()
+    plt.savefig(
+        os.path.join(result_dir, 'dbms_duckdb_tpch.pdf'),
+        format='pdf',
+        bbox_inches='tight',
+    )
+    plt.close()
+    print("Generated dbms_duckdb_tpch.pdf")
+
+
+def plot_duckdb_tpch_cold(df: pd.DataFrame):
+    """Plot DuckDB TPC-H query times (cold cache)."""
+    # Filter to only cold cache variants (release-cold and release-mte-cold)
+    data = df[
+        (df['database'] == 'duckdb') &
+        (df['benchmark'] == 'tpch') &
+        (df['metric_name'] == 'query_time') &
+        (df['variant'].isin(['release-cold', 'release-mte-cold']))
+    ]
+
+    if data.empty:
+        print("No data for duckdb/tpch/query_time (cold cache)")
+        return
+
+    figsize = (figwidth_full, fig_height * 1.5)
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Pivot to get release-cold vs release-mte-cold side by side
+    pivot = data.pivot_table(
+        index='workload',
+        columns='variant',
+        values='metric_value',
+        aggfunc='mean'
+    )
+
+    # Sort workloads naturally (q1, q2, ... q10, q11, etc.)
+    pivot = pivot.reindex(natsorted(pivot.index, alg=ns.NUMAFTER))
+
+    x = np.arange(len(pivot))
+    width = 0.35
+
+    # Get column names dynamically
+    variants = pivot.columns.tolist()
+    baseline_var = 'release-cold' if 'release-cold' in variants else variants[0]
+    mte_var = 'release-mte-cold' if 'release-mte-cold' in variants else variants[-1]
+
+    bars1 = ax.bar(
+        x - width / 2,
+        pivot[baseline_var],
+        width,
+        label='Baseline (Cold)',
+        color=baseline_color,
+        edgecolor='black',
+        hatch=baseline_hatch,
+    )
+    bars2 = ax.bar(
+        x + width / 2,
+        pivot[mte_var],
+        width,
+        label='MTE (Cold)',
+        color=sys_color,
+        edgecolor='black',
+        hatch=sys_hatch,
+    )
+
+    ax.set_ylabel('Query Time (s)', fontsize=FONTSIZE)
+    ax.set_xticks(x)
+    ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
+    ax.tick_params(axis='x', labelrotation=45)
+
+    ax.legend(fontsize=FONTSIZE - 1, loc='upper right')
+
+    # Add better/worse indicator
+    ax.annotate(
+        lower_better_str,
+        color='blue',
+        xy=(0.02, 0.92),
+        xycoords='axes fraction',
+        fontsize=FONTSIZE - 1,
+    )
+
+    # Format y-axis for large numbers
+    ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers))
+
+    plt.tight_layout()
+    plt.savefig(
+        os.path.join(result_dir, 'dbms_duckdb_tpch_cold.pdf'),
+        format='pdf',
+        bbox_inches='tight',
+    )
+    plt.close()
+    print("Generated dbms_duckdb_tpch_cold.pdf")
 
 
 def plot_leveldb_ycsb(df: pd.DataFrame):
@@ -344,11 +498,14 @@ def plot_ladybug_lsqb(df: pd.DataFrame):
 
 
 def plot_overhead_summary(df: pd.DataFrame):
-    """Summary plot of MTE overhead across all databases."""
+    """Summary plot of MTE overhead across all databases (warm cache only)."""
+    # Filter to only warm cache variants (exclude -cold variants)
+    df_warm = df[~df['variant'].str.contains('-cold', na=False)]
+
     # Compute overhead for each database/benchmark
     overheads = []
 
-    for (database, benchmark, workload), group in df.groupby(['database', 'benchmark', 'workload']):
+    for (database, benchmark, workload), group in df_warm.groupby(['database', 'benchmark', 'workload']):
         baseline = group[group['variant'] == 'release']['metric_value'].mean()
         mte = group[group['variant'] == 'release-mte']['metric_value'].mean()
 
@@ -449,6 +606,7 @@ def main():
 
     # Generate individual plots
     plot_duckdb_tpch(df)
+    plot_duckdb_tpch_cold(df)
     plot_leveldb_ycsb(df)
     plot_redis_ycsb(df)
     plot_sqlite_tpcc(df)
