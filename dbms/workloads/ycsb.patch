@@ -1,0 +1,78 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 98069b2..0b19f94 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -198,8 +198,8 @@ else()
+     message(STATUS "WITH_BZ2 - OFF")
+ endif()
+ 
+-add_subdirectory(HdrHistogram_c)
+-include_directories(HdrHistogram_c/include)
+-add_compile_definitions(HDRMEASUREMENT)
+-add_dependencies(ycsb hdr_histogram_static)
+-target_link_libraries(ycsb PRIVATE hdr_histogram_static)
+\ No newline at end of file
++# add_subdirectory(HdrHistogram_c)
++# include_directories(HdrHistogram_c/include)
++# add_compile_definitions(HDRMEASUREMENT)
++# add_dependencies(ycsb hdr_histogram_static)
++# target_link_libraries(ycsb PRIVATE hdr_histogram_static)
+\ No newline at end of file
+diff --git a/utils/rate_limit.h b/utils/rate_limit.h
+index 0d5f924..b5499cb 100644
+--- a/utils/rate_limit.h
++++ b/utils/rate_limit.h
+@@ -21,8 +21,10 @@ namespace utils {
+ 
+ // Token bucket rate limiter for single client
+ class RateLimiter {
+- public:
+-  RateLimiter(int64_t r, int64_t b) : r_(r * TOKEN_PRECISION), b_(b * TOKEN_PRECISION), tokens_(0), last_(Clock::now()) {}
++public:
++  RateLimiter(int64_t r, int64_t b)
++      : r_(r * TOKEN_PRECISION), b_(b * TOKEN_PRECISION), tokens_(0),
++        last_(Clock::now()) {}
+ 
+   inline void Consume(int64_t n) {
+     std::unique_lock<std::mutex> lock(mutex_);
+@@ -34,7 +36,9 @@ class RateLimiter {
+     // refill tokens
+     auto now = Clock::now();
+     auto diff = std::chrono::duration_cast<Duration>(now - last_);
+-    tokens_ = std::min(b_, tokens_ + diff.count() * r_ / 1000000000);
++    tokens_ = b_ <= tokens_ + diff.count() * r_ / 1000000000
++                  ? b_
++                  : tokens_ + diff.count() * r_ / 1000000000;
+     last_ = now;
+ 
+     // check tokens
+@@ -54,14 +58,16 @@ class RateLimiter {
+     // refill tokens
+     auto now = Clock::now();
+     auto diff = std::chrono::duration_cast<Duration>(now - last_);
+-    tokens_ = std::min(b_, tokens_ + diff.count() * r_ * TOKEN_PRECISION / 1000000000);
++    tokens_ = b_ <= tokens_ + diff.count() * r_ * TOKEN_PRECISION / 1000000000
++                  ? b_
++                  : tokens_ + diff.count() * r_ * TOKEN_PRECISION / 1000000000;
+     last_ = now;
+ 
+     // set rate
+     r_ = r * TOKEN_PRECISION;
+   }
+ 
+- private:
++private:
+   using Clock = std::chrono::steady_clock;
+   using Duration = std::chrono::nanoseconds;
+   static constexpr int64_t TOKEN_PRECISION = 10000;
+@@ -73,8 +79,8 @@ class RateLimiter {
+   Clock::time_point last_;
+ };
+ 
+-} // utils
++} // namespace utils
+ 
+-} // ycsbc
++} // namespace ycsbc
+ 
+ #endif // YCSB_C_RATE_LIMIT_H_

@@ -29,3 +29,6 @@
 [submodule "dbms/mysql"]
 	path = dbms/mysql
 	url = git@github.com:TUM-DSE/mysql-memsafedb.git
+[submodule "dbms/workloads/ycsb_leveldb_loadgenerator"]
+	path = dbms/workloads/ycsb_leveldb_loadgenerator
+	url = git@github.com:ls4154/YCSB-cpp.git

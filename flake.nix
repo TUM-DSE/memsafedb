@@ -91,21 +91,30 @@
           buildInputs = with pkgs; [
             clang
             glibc-mte.out
+            gdb
             #malloc-mte
           ] ++ sharedPkgs;
-          MTE_MALLOC= "${malloc-mte}/lib/libhardened_malloc.so";
           NIX_ENFORCE_NO_NATIVE="0";
         };
         "cross-compiler" = pkgs.mkShell {
           name="memsafedb-devshell-eliza-crosscompiler";
           buildInputs = with pkgs; [
-            doctor-pkgs.clang-morello
-            doctor-pkgs.musl-morello-purecap
-            doctor-pkgs.llvm-morello-purecap
+            clang
+            glibc-mte.out
+            #doctor-pkgs.clang-morello
+            #doctor-pkgs.musl-morello-purecap
+            #doctor-pkgs.llvm-morello-purecap
           ] ++ sharedPkgs;
           MORELLO_CLANG_DIR = "${doctor-pkgs.clang-morello}";
           MORELLO_LLVM_DIR = "${doctor-pkgs.llvm-morello-purecap}";
           MORELLO_SYSROOT = "${doctor-pkgs.musl-morello-purecap}";
+          BASE_CLANG_DIR = "${pkgs.pkgsStatic.clang}";
+          BASE_LIBCXX_DIR = "${pkgs.pkgsStatic.libcxx}";
+          BASE_LIBCXX_HDR = "${pkgs.pkgsStatic.libcxx.dev}";
+          BASE_UNWIND_DIR = "${pkgs.pkgsStatic.llvmPackages.libunwind}";
+          BASE_SYSROOT = "${pkgs.pkgsStatic.musl}/lib";
+          BASE_HDRS = "${pkgs.pkgsStatic.musl.dev}";
+          NIX_ENFORCE_NO_NATIVE="0";
         };
         "ace-aarch64" = pkgs.mkShell {
           name="memsafedb-devshell-ace-hybrid";

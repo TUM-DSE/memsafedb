@@ -1,7 +1,7 @@
 dbms_basedir := source_dir()
 TPCH_SF := "10" # ~~2.5GB according to DuckDB website
 
-build_duckdb:
+build_duckdb arch="aarch64":
   #!/usr/bin/env bash
   cd {{dbms_basedir}}/duckdb
   if [[ "{{arch}}" = "cheri" ]] then
@@ -42,6 +42,7 @@ build_redis:
   ARCH="mte" make -j persist-settings
   ARCH="mte" make -j
   make -j
+  # make distclean && make CC="${MORELLO_CLANG_DIR}/bin/clang" AR="${MORELLO_CLANG_DIR}/bin/ar" RANLIB="${MORELLO_CLANG_DIR}/bin/ranlib" MALLOC=libc USE_SYSTEMD=no BUILD_TLS=no OPTIMIZATION="-O3 -g" CFLAGS="-march=morello -mabi=purecap --target=aarch64-linux-musl_purecap --sysroot=${MORELLO_SYSROOT} -Wno-error" LDFLAGS="-L${MORELLO_LLVM_DIR}/lib -L${MORELLO_SYSROOT}/lib -static" -j
 
 run_redis:
   #!/usr/bin/env bash
@@ -60,25 +61,139 @@ run_redis:
 
 build_leveldb:
   #!/usr/bin/env bash
+  set -eu pipefail
   cd {{dbms_basedir}}/leveldb
-  cmake -S . -B build/release -DCMAKE_BUILD_TYPE=Release -DLEVELDB_BUILD_BENCHMARKS=ON -DBUILD_SHARED_LIBS=OFF -DHAVE_TCMALLOC=OFF
-  cmake --build build/release -j
-  cmake -S . -B build/release-mte -DCMAKE_BUILD_TYPE=Release -DLEVELDB_BUILD_BENCHMARKS=ON -DBUILD_SHARED_LIBS=OFF -DHAVE_TCMALLOC=OFF -DCMAKE_C_FLAGS="-march=armv8.5-a+memtag -DMTE" -DCMAKE_CXX_FLAGS="-march=armv8.5-a+memtag -DMTE"
-  cmake --build build/release-mte -j
+  rm -rf build/release-cheri build/release-static build/release-mte build/release-dynamic build/release-asan
+  # Clean YCSB builds
+  rm -rf ../workloads/ycsb_leveldb_loadgenerator/build
+  # Apply YCSB patch
+  (cd {{dbms_basedir}}/workloads/ycsb_leveldb_loadgenerator && git checkout . && git apply {{dbms_basedir}}/workloads/ycsb.patch)
+  
+  # Function to build LevelDB and YCSB for a specific target
+  # Usage: build_target <dir_suffix> <leveldb_cmake_flags> <ycsb_cmake_flags>
+  build_target() {
+    local suffix="$1"
+    local leveldb_flags="$2"
+    local ycsb_flags="$3"
+    local log_file="/tmp/build_leveldb_${suffix}.log"
+    
+    echo -n "Building Target: $suffix ... "
+    
+    # 1. Build LevelDB
+    cd {{dbms_basedir}}/leveldb
+    if ! eval cmake -S . -B "build/release-$suffix" \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DLEVELDB_BUILD_BENCHMARKS=ON \
+      -DLEVELDB_BUILD_TESTS=OFF \
+      -DBUILD_SHARED_LIBS=OFF \
+      -DHAVE_TCMALLOC=OFF \
+      -DHAVE_CRC32C=OFF \
+      -DHAVE_SNAPPY=OFF \
+      -DHAVE_STD_REGEX=ON \
+      -DBENCHMARK_ENABLE_WERROR=OFF \
+      $leveldb_flags > "$log_file" 2>&1; then
+        echo "FAILED (LevelDB Config). Output:"
+        cat "$log_file"
+        rm -f "$log_file"
+        return 1
+    fi
+      
+    if ! cmake --build "build/release-$suffix" -j > "$log_file" 2>&1; then
+        echo "FAILED (LevelDB Build). Output:"
+        cat "$log_file"
+        rm -f "$log_file"
+        return 1
+    fi
+
+    # 2. Build YCSB
+    mkdir -p "{{dbms_basedir}}/workloads/ycsb_leveldb_loadgenerator/build/release-$suffix"
+    cd "{{dbms_basedir}}/workloads/ycsb_leveldb_loadgenerator/build/release-$suffix"
+    
+    if ! eval cmake ../.. \
+      -DBIND_LEVELDB=1 \
+      -DLEVELDB_INCLUDE_DIR="{{dbms_basedir}}/leveldb/include" \
+      -DLEVELDB_LIB="{{dbms_basedir}}/leveldb/build/release-$suffix/libleveldb.a" \
+      -DWITH_SNAPPY=0 \
+      -DWITH_LZ4=0 \
+      -DWITH_ZSTD=0 \
+      $ycsb_flags > "$log_file" 2>&1; then
+        echo "FAILED (YCSB Config). Output:"
+        cat "$log_file"
+        rm -f "$log_file"
+        return 1
+    fi
+      
+    if ! make -j > "$log_file" 2>&1; then
+        echo "FAILED (YCSB Build). Output:"
+        cat "$log_file"
+        rm -f "$log_file"
+        return 1
+    fi
+    
+    echo "SUCCESS"
+    rm -f "$log_file"
+  }
+
+  # 1. CHERI Purecap
+  build_target "cheri" \
+    "-DCMAKE_TOOLCHAIN_FILE=../../utils/morello-toolchain.cmake" \
+    "-DCMAKE_TOOLCHAIN_FILE=../../../../../utils/morello-toolchain.cmake -DWITH_ZLIB=0"
+
+  # 2. AArch64 Static (CHERI Baseline)
+  build_target "static" \
+    "-DCMAKE_TOOLCHAIN_FILE=../../utils/aarch64-static-toolchain.cmake" \
+    "-DCMAKE_TOOLCHAIN_FILE=../../../../../utils/aarch64-static-toolchain.cmake -DWITH_ZLIB=0"
+
+  # 3. MTE
+  build_target "mte" \
+    "-DCMAKE_C_FLAGS='-march=armv8.5-a+memtag -DMTE' -DCMAKE_CXX_FLAGS='-march=armv8.5-a+memtag -DMTE'" \
+    "-DCMAKE_C_FLAGS='-march=armv8.5-a+memtag -DMTE' -DCMAKE_CXX_FLAGS='-march=armv8.5-a+memtag -DMTE' -DWITH_ZLIB=0"
+
+  # 4. AArch64 Dynamic (MTE Baseline)
+  build_target "dynamic" "" "-DWITH_ZLIB=0"
+
+  # 5. AArch64 Dynamic (ASan)
+  asan_flags="-fsanitize=address"
+  build_target "asan" \
+    "-DCMAKE_C_FLAGS=\"$asan_flags\" -DCMAKE_CXX_FLAGS=\"$asan_flags\"" \
+    "-DCMAKE_C_FLAGS=\"$asan_flags\" -DCMAKE_CXX_FLAGS=\"$asan_flags\" -DWITH_ZLIB=0"
 
 run_leveldb:
   #!/usr/bin/env bash
   set -eu pipefail
-  for suffix in "" "-mte"; do
-    db_path="{{dbms_basedir}}/leveldb/dbbench${suffix}"
-    rm -rf "${db_path}"
-    tunables=""
-    if [[ "${suffix}" == "-mte" ]]; then
-      tunables="glibc.mem.tagging=3"
+  
+  OUT_DIR="{{dbms_basedir}}/../results/leveldb"
+  mkdir -p "${OUT_DIR}"
+  
+  threads="1 4"
+  workloads="a b c d e f"
+  
+  for t in $threads; do
+    if [ "$t" -eq 1 ]; then
+      cpus="0"
+    else
+      cpus="0-3"
     fi
-    GLIBC_TUNABLES="$tunables" {{dbms_basedir}}/leveldb/build/release"${suffix}"/db_bench --db="${db_path}"
-    rm -rf "${db_path}"
+    
+    bench_params="--threads=$t --histogram=1 --benchmarks=fillseq,fillsync,fillrandom,overwrite,readrandom,readseq,readreverse,compact,fill100K,crc32c"
+
+    taskset -c $cpus env GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/leveldb/build/release-mte/db_bench ${bench_params} > "${OUT_DIR}/bench_mte_t${t}.log" 2>&1 || echo "MTE db_bench failed"
+    taskset -c $cpus {{dbms_basedir}}/leveldb/build/release-dynamic/db_bench ${bench_params} > "${OUT_DIR}/bench_baseline-dynamic_t${t}.log" 2>&1 || echo "Dynamic db_bench failed"
+    taskset -c $cpus {{dbms_basedir}}/leveldb/build/release-asan/db_bench ${bench_params} > "${OUT_DIR}/bench_asan_t${t}.log" 2>&1 || echo "ASan db_bench failed"
+    ssh ace "taskset -c $cpus {{dbms_basedir}}/leveldb/build/release-static/db_bench ${bench_params}" > "${OUT_DIR}/bench_baseline-static_t${t}.log" 2>&1 || echo "Static db_bench failed"
+    ssh ace "taskset -c $cpus {{dbms_basedir}}/leveldb/build/release-cheri/db_bench ${bench_params}" > "${OUT_DIR}/bench_cheri-purecap_t${t}.log" 2>&1 || echo "CHERI db_bench failed"
+    
+    for w in $workloads; do
+        taskset -c $cpus env GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/workloads/ycsb_leveldb_loadgenerator/build/release-mte/ycsb -load -run -db leveldb -P {{dbms_basedir}}/workloads/ycsb_leveldb_loadgenerator/workloads/workload${w} -P {{dbms_basedir}}/workloads/ycsb_leveldb_loadgenerator/leveldb/leveldb.properties -p threadcount=${t} -s > "${OUT_DIR}/ycsb_${w}_mte_t${t}.log" 2>&1 || echo "MTE YCSB $w failed"
+        taskset -c $cpus {{dbms_basedir}}/workloads/ycsb_leveldb_loadgenerator/build/release-dynamic/ycsb -load -run -db leveldb -P {{dbms_basedir}}/workloads/ycsb_leveldb_loadgenerator/workloads/workload${w} -P {{dbms_basedir}}/workloads/ycsb_leveldb_loadgenerator/leveldb/leveldb.properties -p threadcount=${t} -s > "${OUT_DIR}/ycsb_${w}_dynamic_t${t}.log" 2>&1 || echo "Dynamic YCSB $w failed"
+        #taskset -c $cpus {{dbms_basedir}}/workloads/ycsb_leveldb_loadgenerator/build/release-asan/ycsb -load -run -db leveldb -P {{dbms_basedir}}/workloads/ycsb_leveldb_loadgenerator/workloads/workload${w} -P {{dbms_basedir}}/workloads/ycsb_leveldb_loadgenerator/leveldb/leveldb.properties -p threadcount=${t} -s > "${OUT_DIR}/ycsb_${w}_asan_t${t}.log" 2>&1 || echo "ASan YCSB $w failed"
+        ssh ace "taskset -c $cpus {{dbms_basedir}}/workloads/ycsb_leveldb_loadgenerator/build/release-static/ycsb -load -run -db leveldb -P {{dbms_basedir}}/workloads/ycsb_leveldb_loadgenerator/workloads/workload${w} -P {{dbms_basedir}}/workloads/ycsb_leveldb_loadgenerator/leveldb/leveldb.properties -p threadcount=${t} -s" > "${OUT_DIR}/ycsb_${w}_static_t${t}.log" 2>&1 || echo "Static YCSB $w failed"
+        ssh ace "taskset -c $cpus {{dbms_basedir}}/workloads/ycsb_leveldb_loadgenerator/build/release-cheri/ycsb -load -run -db leveldb -P {{dbms_basedir}}/workloads/ycsb_leveldb_loadgenerator/workloads/workload${w} -P {{dbms_basedir}}/workloads/ycsb_leveldb_loadgenerator/leveldb/leveldb.properties -p threadcount=${t} -s" > "${OUT_DIR}/ycsb_${w}_cheri_t${t}.log" 2>&1 || echo "CHERI YCSB $w failed"
+    done
   done
+  
+  python3 {{dbms_basedir}}/parse_results_db_bench.py "${OUT_DIR}"
+  python3 {{dbms_basedir}}/parse_results_ycsb.py "${OUT_DIR}"
 
 build_sqlite:
   #!/usr/bin/env bash
@@ -93,6 +208,8 @@ build_sqlite:
     cd build/release-mte
     ../../configure CFLAGS="-O2 -DSQLITE_ENABLE_RTREE -march=armv8.5-a+memtag -DMTE"
     make -j sqlite3 speedtest1
+    # ../../configure --host=aarch64-linux-musl_purecap --disable-tcl --disable-readline --disable-shared --enable-static CC="clang" CFLAGS="-O2 -g -DSQLITE_ENABLE_RTREE -march=morello -mabi=purecap --target=aarch64-linux-musl_purecap --sysroot=$MUSL_HOME" LDFLAGS="-L$MORELLO_HOME/llvm/lib -L$MUSL_HOME/lib -static"
+    # make -j sqlite3 speedtest1
   )
 
 run_sqlite size="100":
