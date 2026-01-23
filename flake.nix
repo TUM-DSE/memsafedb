@@ -41,6 +41,7 @@
       }
     );
     ycsb-bin = pkgs.callPackage ./nix/ycsb.nix {};
+    py-tpcc = pkgs.callPackage ./nix/py-tpcc {};
     python-pkgs = with pkgs.python3Packages; [
       execo
       requests
@@ -50,7 +51,9 @@
       pyyaml
       tqdm
       natsort
+      psutil
     ];
+    mysql_jdbc_jar = "${pkgs.mysql_jdbc}/share/java/mysql-connector-j.jar";
     sharedPkgs = with pkgs; [
       gnumake 
       pax-utils 
@@ -72,7 +75,15 @@
       zlib
       maven
       ycsb-bin
+      py-tpcc
       lldb
+      openssl
+      libtirpc
+      rpcsvc-proto
+      mysql_jdbc
+      unixtools.netstat
+      sysbench
+      snappy
     ];
   in
   {
@@ -84,6 +95,7 @@
         binutils-morello = pkgs.callPackage ./nix/binutils.nix {};
         gcc-morello = pkgs.callPackage ./nix/gcc.nix { inherit binutils-morello; };
         ycsb-bin = pkgs.callPackage ./nix/ycsb.nix {};
+        py-tpcc = pkgs.callPackage ./nix/py-tpcc {};
       };
       devShells = {
         "eliza" = pkgs.mkShell {
@@ -94,7 +106,10 @@
             gdb
             #malloc-mte
           ] ++ sharedPkgs;
+          MTE_MALLOC= "${malloc-mte}/lib/libhardened_malloc.so";
+          MYSQL_JDBC_JAR = mysql_jdbc_jar;
           NIX_ENFORCE_NO_NATIVE="0";
+          SYSBENCH_PATH="${pkgs.sysbench}";
         };
         "cross-compiler" = pkgs.mkShell {
           name="memsafedb-devshell-eliza-crosscompiler";
@@ -115,6 +130,7 @@
           BASE_SYSROOT = "${pkgs.pkgsStatic.musl}/lib";
           BASE_HDRS = "${pkgs.pkgsStatic.musl.dev}";
           NIX_ENFORCE_NO_NATIVE="0";
+          MYSQL_JDBC_JAR = mysql_jdbc_jar;
         };
         "ace-aarch64" = pkgs.mkShell {
           name="memsafedb-devshell-ace-hybrid";
@@ -129,6 +145,7 @@
           MUSL_PATH = "${pkgs.pkgsStatic.musl}";
           LIBCXX_PATH = "${pkgs.pkgsStatic.libcxx}";
           LIBCXX_HDR = "${pkgs.pkgsStatic.libcxx.dev}";
+          MYSQL_JDBC_JAR = mysql_jdbc_jar;
           NIX_ENFORCE_NO_NATIVE="0";
 
           # Needed to fix https://github.com/NixOS/nixpkgs/issues/177129
@@ -148,6 +165,7 @@
           #GCC_PATH = "${pkgs.gcc-unwrapped}";
           #GCC_INCLUDES = "-I${pkgs.gcc-unwrapped}/include/c++/14.3.0 -I${pkgs.gcc-unwrapped}/include/c++/14.3.0/aarch64-unknown-linux-gnu -I${pkgs.gcc-unwrapped}/include/c++/14.3.0/backward -I${pkgs.gcc-unwrapped}/lib/gcc/aarch64-unknown-linux-gnu/14.3.0/include -I${pkgs.gcc-unwrapped}/include -I${pkgs.gcc-unwrapped}/lib/gcc/aarch64-unknown-linux-gnu/14.3.0/include-fixed";
 
+          MYSQL_JDBC_JAR = mysql_jdbc_jar;
           shellHook = ''
             source /morello/env/morello-sdk
           '';

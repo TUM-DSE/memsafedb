@@ -12,7 +12,13 @@
 #define MTE_MODE_ASYNC 2
 #define ADDR_MASK ((uintptr_t)0x00FFFFFFFFFFFFFFULL)
 
-inline size_t round_to_tag_granule(size_t size) {
+#ifdef __cplusplus
+#define CONSTEXPR_MODIFIER constexpr
+#else
+#define CONSTEXPR_MODIFIER
+#endif
+
+CONSTEXPR_MODIFIER inline size_t round_to_tag_granule(size_t size) {
   return (size + (MTE_GRANULE_SIZE - 1)) & ~(MTE_GRANULE_SIZE - 1);
 }
 
@@ -64,6 +70,11 @@ inline void* untag_memory_region(void* ptr, size_t size){
 
 inline void* clear_tag(void *ptr){
   return (void*)((uintptr_t)ptr & ADDR_MASK);
+}
+
+inline void* load_tag(void *ptr){
+  __asm__ volatile("ldg %0, [%0]" : "+r"(ptr));
+  return ptr;
 }
 
 inline void print_tag(void* ptr){

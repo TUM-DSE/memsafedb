@@ -1,4 +1,4 @@
 results
 plots/__pycache__
 **/dump.rdb
-
+**/__pycache__

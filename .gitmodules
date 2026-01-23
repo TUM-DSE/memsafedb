@@ -22,13 +22,13 @@
   branch = memsafedb
 [submodule "dbms/sqlite"]
 	path = dbms/sqlite
-	url = git@github.com:TUM-DSE/mysql-memsafedb.git
+	url = git@github.com:TUM-DSE/sqlite-memsafedb.git
 [submodule "dbms/ladybug"]
 	path = dbms/ladybug
 	url = git@github.com:TUM-DSE/ladybug-memsafedb.git
 [submodule "dbms/mysql"]
 	path = dbms/mysql
 	url = git@github.com:TUM-DSE/mysql-memsafedb.git
-[submodule "dbms/workloads/ycsb_leveldb_loadgenerator"]
-	path = dbms/workloads/ycsb_leveldb_loadgenerator
-	url = git@github.com:ls4154/YCSB-cpp.git
+[submodule "dbms/ycsb-cpp"]
+	path = dbms/ycsb-cpp
+	url = https://github.com/ls4154/YCSB-cpp.git
