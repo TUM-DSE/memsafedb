@@ -92,8 +92,8 @@ run_redis:
     do
       {{dbms_basedir}}/redis/src/redis-server${suffix} &> /dev/null &
 
-      ycsb.sh load redis -s -P {{dbms_basedir}}/workloads/YCSB/workload$l -p "redis.host=127.0.0.1" -p "redis.port=6379" &> /dev/null
-      ycsb.sh run redis -s -P {{dbms_basedir}}/workloads/YCSB/workload$l -p "redis.host=127.0.0.1" -p "redis.port=6379" &> /dev/null
+      ycsb.sh load redis -s -P {{dbms_basedir}}/workloads/YCSB/workload$l -p "redis.host=127.0.0.1" -p "redis.port=6379"
+      ycsb.sh run redis -s -P {{dbms_basedir}}/workloads/YCSB/workload$l -p "redis.host=127.0.0.1" -p "redis.port=6379"
 
       {{dbms_basedir}}/redis/src/redis-cli${suffix} shutdown
       rm -f {{dbms_basedir}}/redis/dump.rdb
