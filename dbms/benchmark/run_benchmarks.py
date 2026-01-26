@@ -63,7 +63,8 @@ def run_benchmark(db: str, repetition: int) -> list[dict]:
     result = subprocess.run(
         cmd,
         shell=True,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
         cwd=PROJECT_ROOT,
     )
@@ -73,8 +74,8 @@ def run_benchmark(db: str, repetition: int) -> list[dict]:
         if result.stderr:
             print(f"  stderr: {result.stderr[:500]}", file=sys.stderr)
 
-    # Combine stdout and stderr for parsing (some tools output to stderr)
-    combined_output = result.stdout + "\n" + result.stderr
+    # Preserve stream ordering for parsers that rely on benchmark markers.
+    combined_output = result.stdout or ""
 
     parser = DB_TO_PARSER.get(db)
     if not parser:

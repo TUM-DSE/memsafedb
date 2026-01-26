@@ -85,15 +85,22 @@ build_redis:
   # make distclean && make CC="${MORELLO_CLANG_DIR}/bin/clang" AR="${MORELLO_CLANG_DIR}/bin/ar" RANLIB="${MORELLO_CLANG_DIR}/bin/ranlib" MALLOC=libc USE_SYSTEMD=no BUILD_TLS=no OPTIMIZATION="-O3 -g" CFLAGS="-march=morello -mabi=purecap --target=aarch64-linux-musl_purecap --sysroot=${MORELLO_SYSROOT} -Wno-error" LDFLAGS="-L${MORELLO_LLVM_DIR}/lib -L${MORELLO_SYSROOT}/lib -static" -j
 
 # Run YCSB for redis
-run_redis:
+run_redis recordcount="10000" operationcount="10000":
   #!/usr/bin/env bash
   for suffix in "" "-mte"; do
+    if [[ -z "$suffix" ]]; then
+      variant="release"
+    else
+      variant="release-mte"
+    fi
     for l in a b c d e f
     do
       {{dbms_basedir}}/redis/src/redis-server${suffix} &> /dev/null &
 
-      ycsb.sh load redis -s -P {{dbms_basedir}}/workloads/YCSB/workload$l -p "redis.host=127.0.0.1" -p "redis.port=6379"
-      ycsb.sh run redis -s -P {{dbms_basedir}}/workloads/YCSB/workload$l -p "redis.host=127.0.0.1" -p "redis.port=6379"
+      echo "=== REDIS_YCSB workload=${l} variant=${variant} phase=load ==="
+      ycsb.sh load redis -s -P {{dbms_basedir}}/workloads/YCSB/workload$l -p "redis.host=127.0.0.1" -p "redis.port=6379" -p "recordcount={{recordcount}}"
+      echo "=== REDIS_YCSB workload=${l} variant=${variant} phase=run ==="
+      ycsb.sh run redis -s -P {{dbms_basedir}}/workloads/YCSB/workload$l -p "redis.host=127.0.0.1" -p "redis.port=6379" -p "recordcount={{recordcount}}" -p "operationcount={{operationcount}}"
 
       {{dbms_basedir}}/redis/src/redis-cli${suffix} shutdown
       rm -f {{dbms_basedir}}/redis/dump.rdb
