@@ -2,7 +2,6 @@
 
 #ifdef MTE
 #include <sys/prctl.h>
-#include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <arm_acle.h>
@@ -11,6 +10,17 @@
 #define MTE_MODE_SYNC 1
 #define MTE_MODE_ASYNC 2
 #define ADDR_MASK ((uintptr_t)0x00FFFFFFFFFFFFFFULL)
+
+#define MY_ASSERT(cond)                                      \
+    do {                                                     \
+        if (!(cond)) {                                      \
+            fprintf(stderr,                                 \
+                    "Assertion failed: %s\n"                \
+                    "  at %s:%d\n",                          \
+                    #cond, __FILE__, __LINE__);              \
+            exit(1);                                        \
+        }                                                    \
+    } while (0)
 
 #ifdef __cplusplus
 #define CONSTEXPR_MODIFIER constexpr
@@ -29,12 +39,9 @@ inline void init_process(int mode){
   }
 }
 
-inline void* tag_memory_region(void* ptr, size_t size){
-  assert(ptr != NULL);
-  if(size % 16 != 0){
-    perror("non aligned tagging");
-  }
-  assert(size % 16 == 0);
+inline void* tag_memory_region(void* ptr, size_t size) {
+  MY_ASSERT(ptr != NULL);
+  MY_ASSERT(size % 16 == 0);
   __asm__ volatile("irg %0, %0" : "+r" (ptr) : );
   void *end = (char*) ptr + size;
   void *ret = ptr;
@@ -45,8 +52,8 @@ inline void* tag_memory_region(void* ptr, size_t size){
 }
 
 inline void* tag_and_zero_memory_region(void* ptr, size_t size){
-  assert(ptr != NULL);
-  assert(size % 16 == 0);
+  MY_ASSERT(ptr != NULL);
+  MY_ASSERT(size % 16 == 0);
   __asm__ volatile("irg %0, %1" : "+r" (ptr) : );
   void *end = (char*) ptr + size;
   void *ret = ptr;
@@ -57,8 +64,8 @@ inline void* tag_and_zero_memory_region(void* ptr, size_t size){
 }
 
 inline void* untag_memory_region(void* ptr, size_t size){
-  assert(ptr != NULL);
-  assert(size % 16 == 0);
+  MY_ASSERT(ptr != NULL);
+  MY_ASSERT(size % 16 == 0);
 
   void *ut_ptr = (void*)((uintptr_t)ptr & ADDR_MASK);
   void *end = (char*) ptr + size;
