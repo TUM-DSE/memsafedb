@@ -1,5 +1,5 @@
 dbms_basedir := source_dir()
-TPCH_SF := "10" # ~~2.5GB according to DuckDB website
+
 CHERI_HOST := "ace.dos.cit.tum.de"
 DATA_DIR := "/scratch/${USER}/memsafedb/data"
 
@@ -372,118 +372,212 @@ run_leveldb recordcount="100000" operationcount="100000" threads="1":
 build_sqlite:
   #!/usr/bin/env bash
   cd {{dbms_basedir}}/sqlite
-  mkdir -p build/release build/release-mte
+  rm -rf build/release-dynamic build/release-mte build/release-cheri build/release-static
+  mkdir -p build/release-dynamic build/release-mte build/release-cheri build/release-static
   (
-    cd build/release
+    cd build/release-dynamic
     ../../configure CFLAGS="-O2 -DSQLITE_ENABLE_RTREE -march=armv8.5-a"
-    make -j sqlite3 speedtest1 libsqlite3.so
+    make -j sqlite3 libsqlite3.so
   )
   (
     cd build/release-mte
     ../../configure CFLAGS="-O2 -DSQLITE_ENABLE_RTREE -march=armv8.5-a+memtag -DMTE"
-    make -j sqlite3 speedtest1 libsqlite3.so
-    # ../../configure --host=aarch64-linux-musl_purecap --disable-tcl --disable-readline --disable-shared --enable-static CC="clang" CFLAGS="-O2 -g -DSQLITE_ENABLE_RTREE -march=morello -mabi=purecap --target=aarch64-linux-musl_purecap --sysroot=$MUSL_HOME" LDFLAGS="-L$MORELLO_HOME/llvm/lib -L$MUSL_HOME/lib -static"
-    # make -j sqlite3 speedtest1
+    make -j sqlite3 libsqlite3.so
+  )
+  (
+    cd build/release-cheri
+    ../../configure --host=aarch64-linux-musl_purecap --disable-tcl --disable-readline --disable-shared --enable-static CC="$MORELLO_CLANG_DIR/bin/clang -nostartfiles -nodefaultlibs" CFLAGS="-O2 -g -DSQLITE_ENABLE_RTREE -march=morello -mabi=purecap --target=aarch64-linux-musl_purecap -D__SIZEOF_POINTER__=16 --sysroot=$MORELLO_SYSROOT" LDFLAGS="$MORELLO_SYSROOT/lib/crt1.o $MORELLO_SYSROOT/lib/crti.o -L$MORELLO_LLVM_DIR/lib -L$MORELLO_LLVM_DIR/lib/linux -L$MORELLO_SYSROOT/lib -static -fuse-ld=lld -lc -lunwind -lclang_rt.builtins-aarch64 $MORELLO_SYSROOT/lib/crtn.o"
+    make -j sqlite3
+  )
+  (
+    cd build/release-static
+    CLANG="$BASE_CLANG_DIR/bin/clang"
+    TARGET_FLAGS="--target=aarch64-unknown-linux-musl"
+    CRT_BEGIN=$($CLANG $TARGET_FLAGS -print-file-name=crtbeginT.o)
+    CRT_END=$($CLANG $TARGET_FLAGS -print-file-name=crtend.o)
+    BUILTINS_LIB=$($CLANG $TARGET_FLAGS -print-file-name=libclang_rt.builtins-aarch64.a)
+    BUILTINS_DIR=$(dirname $BUILTINS_LIB)
+    LDFLAGS_CONF="$BASE_SYSROOT/crt1.o $BASE_SYSROOT/crti.o $CRT_BEGIN -L$BASE_SYSROOT -L$BASE_LIBCXX_DIR/lib -L$BASE_UNWIND_DIR/lib -L$BUILTINS_DIR -static"
+    LIBS_CONF="-Wl,--start-group -lc -lm -lunwind -lclang_rt.builtins-aarch64 -Wl,--end-group $CRT_END $BASE_SYSROOT/crtn.o"
+    ../../configure --host=aarch64-unknown-linux-musl --disable-tcl --disable-readline --disable-shared --enable-static CC="$CLANG -nostartfiles -nodefaultlibs" CFLAGS="-O2 -DSQLITE_ENABLE_RTREE $TARGET_FLAGS --unwindlib=libunwind -I$BASE_HDRS/include" LDFLAGS="$LDFLAGS_CONF" LIBS="$LIBS_CONF"
+    make -j sqlite3 "LDFLAGS.configure=$LDFLAGS_CONF $LIBS_CONF"
   )
 
-# Run the sqlite speedtest1
-run_sqlite_speedtest size="100":
+run_sqlite_ace warehouses="1" duration="60" clients="1":
   #!/usr/bin/env bash
-  set -eu pipefail
-  for suffix in "" "-mte"; do
-    db_path="{{dbms_basedir}}/sqlite/build/release${suffix}/speedtest1.db"
-    rm -f "${db_path}" "${db_path}-journal" "${db_path}-wal" "${db_path}-shm" "${db_path}-vacuum"
-    tunables=""
-    if [[ "${suffix}" == "-mte" ]]; then
-      tunables="glibc.mem.tagging=3"
-    fi
-    SQLITE_TMPDIR="/tmp" GLIBC_TUNABLES="$tunables" {{dbms_basedir}}/sqlite/build/release"${suffix}"/speedtest1 --size "{{size}}" "${db_path}"
-    rm -f "${db_path}" "${db_path}-journal" "${db_path}-wal" "${db_path}-shm" "${db_path}-vacuum"
+  set -euo pipefail
+
+  ddl_path="{{dbms_basedir}}/sqlite/tpcc.sql"
+  if [[ ! -f "${ddl_path}" ]]; then
+    cp "$(dirname "$(which py-tpcc)")/../lib/py-tpcc/tpcc.sql" "${ddl_path}"
+  fi
+
+  mkdir -p "{{DATA_DIR}}/sqlite"
+  for suffix in "static" "cheri"; do
+    echo "=== Executing $suffix ==="
+    run_root="{{dbms_basedir}}/sqlite/build/release-${suffix}"
+    db_path="{{DATA_DIR}}/sqlite/tpcc-${suffix}.db"
+    config_path="${run_root}/tpcc.config"
+
+    rm -f "${db_path}" "${db_path}-journal" "${db_path}-wal" "${db_path}-shm"
+    rm -f "${run_root}/results.log"
+
+    printf "[sqlite]\ndatabase = ${db_path}\n" > "${config_path}"
+
+    export PATH="${run_root}:${PATH}"
+    cd "${run_root}"
+    py-tpcc --warehouses "{{warehouses}}" --duration "{{duration}}" --clients "{{clients}}" --ddl "${ddl_path}" --config "${config_path}" sqlite
+
+    rm -f "${db_path}" "${db_path}-journal" "${db_path}-wal" "${db_path}-shm"
   done
 
-# Run TPC-C for sqlite
-run_sqlite warehouses="1" duration="60" clients="1":
+run_sqlite_eliza warehouses="1" duration="60" clients="1":
   #!/usr/bin/env bash
   set -euo pipefail
 
   ddl_path="{{dbms_basedir}}/sqlite/tpcc.sql"
 
-  # Copy DDL file if not present
   if [[ ! -f "${ddl_path}" ]]; then
     cp "$(dirname "$(which py-tpcc)")/../lib/py-tpcc/tpcc.sql" "${ddl_path}"
   fi
 
-  for suffix in "" "-mte"; do
-    run_root="{{dbms_basedir}}/sqlite/build/release${suffix}"
-    db_path="${run_root}/tpcc.db"
+  mkdir -p "{{DATA_DIR}}/sqlite"
+  for suffix in "dynamic" "mte"; do
+    echo "=== Executing $suffix ==="
+    run_root="{{dbms_basedir}}/sqlite/build/release-${suffix}"
+    db_path="{{DATA_DIR}}/sqlite/tpcc-${suffix}.db"
     config_path="${run_root}/tpcc.config"
-
-    # Cleanup previous run
     rm -f "${db_path}" "${db_path}-journal" "${db_path}-wal" "${db_path}-shm"
     rm -f "${run_root}/results.log"
 
     tunables=""
     preload="${run_root}/libsqlite3.so"
-    if [[ "${suffix}" == "-mte" ]]; then
+    if [[ "${suffix}" == "mte" ]]; then
       tunables="glibc.mem.tagging=3"
       preload="${run_root}/libsqlite3.so:${MTE_MALLOC}"
     fi
 
-    # Create config file
     printf "[sqlite]\ndatabase = ${db_path}\n" > "${config_path}"
 
-    # Ensure we use the correct sqlite3 binary and library
     export PATH="${run_root}:${PATH}"
     export LD_PRELOAD="${preload}"
 
-    # Run TPC-C benchmark
     cd "${run_root}"
-    GLIBC_TUNABLES="${tunables}" py-tpcc \
-      --warehouses "{{warehouses}}" \
-      --duration "{{duration}}" \
-      --clients "{{clients}}" \
-      --ddl "${ddl_path}" \
-      --config "${config_path}" \
-      sqlite
+    GLIBC_TUNABLES="${tunables}" py-tpcc --warehouses "{{warehouses}}" --duration "{{duration}}" --clients "{{clients}}" --ddl "${ddl_path}" --config "${config_path}" sqlite
 
-    # Cleanup
     rm -f "${db_path}" "${db_path}-journal" "${db_path}-wal" "${db_path}-shm"
   done
+
+run_sqlite warehouses="1" duration="60" clients="1":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  just -f dbms::run_sqlite_eliza {{warehouses}} {{duration}} {{clients}}
+  ssh ace "nix develop {{dbms_basedir}}/..#ace-cheri --command just -f dbms::run_sqlite_ace {{warehouses}} {{duration}} {{clients}}"
+
+setup_ladybug sf="10":
+  #!/usr/bin/env python
+  import os
+  import shutil
+  import glob
+  import subprocess
+  import gzip
+
+  sf = "{{sf}}"
+  base_dir = "{{DATA_DIR}}/ladybug/dataset"
+  target_dir = os.path.join(base_dir, f"ldbc-sf{sf}")
+
+  if os.path.exists(target_dir) and os.listdir(target_dir):
+    print(f"Dataset for SF{sf} already exists in {target_dir}")
+    exit(0)
+
+  url = f"https://datasets.ldbcouncil.org/snb-interactive-v1/social_network-sf{sf}-CsvBasic-StringDateFormatter.tar.zst"
+  archive = f"social_network-sf{sf}-CsvBasic-StringDateFormatter.tar.zst"
+
+  print(f"Downloading {url}...")
+  subprocess.run(["wget", "-q", "--show-progress", url], check=True)
+
+  print(f"Extracting {archive}...")
+  subprocess.run(["tar", "--use-compress-program=unzstd", "-xf", archive], check=True)
+
+  extracted_dir = archive.replace(".tar.zst", "")
+  os.makedirs(target_dir, exist_ok=True)
+
+  print("Organizing files...")
+
+  for section in ["dynamic", "static"]:
+    section_path = os.path.join(extracted_dir, section)
+    if not os.path.exists(section_path):
+      continue
+
+    for item in os.listdir(section_path):
+      source_path = os.path.join(section_path, item)
+      if os.path.isfile(source_path):
+        shutil.move(source_path, os.path.join(target_dir, item))
+
+  # Cleanup
+  shutil.rmtree(extracted_dir)
+  os.remove(archive)
 
 build_ladybug:
   #!/usr/bin/env bash
   cd {{dbms_basedir}}/ladybug
-  ARCH=aarch64 make -j release
-  ARCH=aarch64 make -j python
+  export EXTRA_CMAKE_FLAGS="-DBUILD_BENCHMARK=TRUE"
+  ARCH=dynamic make clean
+  ARCH=dynamic make -j release
+  ARCH=dynamic make -j python
+  ARCH=mte make clean
   ARCH=mte make -j release
   ARCH=mte make -j python
+  ARCH=cheri make clean
+  ARCH=cheri make -j release
+  ARCH=cheri make -j python
+  ARCH=static make clean
+  ARCH=static make -j release
+  ARCH=static make -j python
 
-run_ladybug threads="":
+run_ladybug_ace threads="4" sf="10":
   #!/usr/bin/env bash
   set -eu pipefail
-  dataset_dir="{{dbms_basedir}}/ladybug/dataset/lsqb-sf01"
-  csv_root="{{dbms_basedir}}/ladybug/build/lsqb-data"
-  mkdir -p "${csv_root}/lsqb-datasets"
-  ln -sfn "${dataset_dir}" "${csv_root}/lsqb-datasets/social-network-sf0.1-projected-fk"
-  export CSV_DIR="${csv_root}"
-  export SCALE_FACTOR="0.1"
-  if [[ -n "{{threads}}" ]]; then
-    export NUM_THREADS="{{threads}}"
-  fi
-  for suffix in "" "-mte"; do
-    tunables=""
-    if [[ "${suffix}" == "-mte" ]]; then
-      tunables="glibc.mem.tagging=3"
-    fi
-    build_root="{{dbms_basedir}}/ladybug/build${suffix}"
-    serialized_root="${build_root}/lsqb-serialized"
+  export CSV_DIR="{{DATA_DIR}}/ladybug/dataset/"
+  export SCALE_FACTOR="{{sf}}"
+  for suffix in "static" "cheri"; do
+    build_root="{{dbms_basedir}}/ladybug/build-${suffix}"
+    serialized_root="${build_root}/ldbc-serialized"
     rm -rf "${serialized_root}"
     mkdir -p "${serialized_root}"
     export SERIALIZED_DIR="${serialized_root}"
-    PYTHONPATH="{{dbms_basedir}}/ladybug/tools/python_api/tools/python_api/build${suffix}:${PYTHONPATH:-}" GLIBC_TUNABLES="${tunables}" \
-      python3 {{dbms_basedir}}/ladybug/benchmark/lsqb/benchmark_runner.py
+    echo "=== Executing $suffix - threads: {{threads}} ==="
+    PYTHONPATH="{{dbms_basedir}}/ladybug/tools/python_api/tools/python_api/build-${suffix}:${PYTHONPATH:-}" \
+      DRY_RUN=true python3 {{dbms_basedir}}/ladybug/benchmark/benchmark_runner.py --dataset ldbc-sf{{sf}} --thread {{threads}}
     rm lsqb.log
   done
+
+run_ladybug_eliza threads="4" sf="10":
+  #!/usr/bin/env bash
+  set -eu pipefail
+  export CSV_DIR="{{DATA_DIR}}/ladybug/dataset/"
+  export SCALE_FACTOR="{{sf}}"
+  for suffix in "dynamic" "mte"; do
+    tunables=""
+    if [[ "${suffix}" == "mte" ]]; then
+      tunables="glibc.mem.tagging=3"
+    fi
+    build_root="{{dbms_basedir}}/ladybug/build-${suffix}"
+    serialized_root="${build_root}/ldbc-serialized"
+    rm -rf "${serialized_root}"
+    mkdir -p "${serialized_root}"
+    export SERIALIZED_DIR="${serialized_root}"
+    echo "=== Executing $suffix - threads: {{threads}} ==="
+    PYTHONPATH="{{dbms_basedir}}/ladybug/tools/python_api/tools/python_api/build-${suffix}:${PYTHONPATH:-}" GLIBC_TUNABLES="${tunables}" \
+      DRY_RUN=true python3 {{dbms_basedir}}/ladybug/benchmark/benchmark_runner.py --dataset ldbc-sf{{sf}} --thread {{threads}}
+  done
+
+run_ladybug threads="4" sf="10":
+  #!/usr/bin/env bash
+  just dbms::setup_ladybug "{{sf}}"
+  just dbms::run_ladybug_eliza "{{threads}}" "{{sf}}"
+  ssh ace "nix develop {{dbms_basedir}}/..#ace-aarch64 --command just dbms::setup_ladybug {{sf}}"
+  ssh ace "nix develop {{dbms_basedir}}/..#ace-cheri --command just dbms::run_ladybug_ace {{threads}} {{sf}}"
 
 build_mysql:
   #!/usr/bin/env bash
