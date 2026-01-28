@@ -84,6 +84,7 @@
       unixtools.netstat
       sysbench
       snappy
+      tcl
     ];
   in
   {

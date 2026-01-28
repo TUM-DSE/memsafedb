@@ -185,71 +185,39 @@ def parse_ycsb_java_output(output: str, database: str, repetition: int) -> Itera
 def parse_redis_output(output: str, repetition: int) -> Iterator[dict]:
     """Parse Redis YCSB output.
 
-    Redis uses ycsb.sh which has standard YCSB output format.
-    Runs in order: (release, workloads a-f), (mte, workloads a-f)
+    Redis uses ycsb.sh; run_redis emits explicit separators per workload/phase.
     """
-    # Redis doesn't have explicit workload markers in the output,
-    # need to track based on order
-    workloads = ['a', 'b', 'c', 'd', 'e', 'f']
-    variants = ['release', 'release-mte']
+    marker_pattern = re.compile(
+        r'REDIS_YCSB\s+workload=([a-f])\s+variant=([a-z0-9-]+)\s+phase=(load|run)',
+        re.IGNORECASE,
+    )
+    throughput_pattern = re.compile(r'operations;\s*([0-9.]+)\s+current ops/sec;')
 
-    # Split output into sections by looking for YCSB run markers
-    # The pattern "[OVERALL]" marks start of results for each run
-    sections = re.split(r'(?=\[OVERALL\])', output)
-    sections = [s for s in sections if s.strip() and '[OVERALL]' in s]
+    markers = list(marker_pattern.finditer(output))
+    for idx, marker in enumerate(markers):
+        workload = marker.group(1).lower()
+        variant = marker.group(2).lower()
+        phase = marker.group(3).lower()
+        if phase != "run":
+            continue
 
-    # Each variant runs load+run for each workload
-    # So we have: 12 runs per variant (6 load + 6 run), and we only care about run phase
-    # Actually looking at the just file: load then run for each workload
-    # So order is: load_a, run_a, load_b, run_b, ... for release, then same for mte
+        start = marker.end()
+        end = markers[idx + 1].start() if idx + 1 < len(markers) else len(output)
+        segment = output[start:end]
+        matches = throughput_pattern.findall(segment)
+        if not matches:
+            continue
 
-    run_idx = 0
-    for section in sections:
-        # Determine which workload and variant based on index
-        # 12 sections per variant (6 workloads x 2 phases)
-        variant_idx = run_idx // 12
-        within_variant_idx = run_idx % 12
-        workload_idx = within_variant_idx // 2
-        is_run_phase = within_variant_idx % 2 == 1
-
-        if variant_idx < len(variants) and workload_idx < len(workloads):
-            variant = variants[variant_idx]
-            workload = workloads[workload_idx]
-
-            # Only record run phase results
-            if is_run_phase:
-                for line in section.split('\n'):
-                    line = line.strip()
-
-                    if line.startswith('[OVERALL], Throughput'):
-                        match = re.match(r'\[OVERALL\], Throughput\(ops/sec\), ([\d.]+)', line)
-                        if match:
-                            yield {
-                                'database': 'redis',
-                                'variant': variant,
-                                'benchmark': 'ycsb',
-                                'workload': workload,
-                                'metric_name': 'throughput',
-                                'metric_value': float(match.group(1)),
-                                'unit': 'ops/sec',
-                                'repetition': repetition,
-                            }
-
-                    elif line.startswith('[READ], AverageLatency'):
-                        match = re.match(r'\[READ\], AverageLatency\(us\), ([\d.]+)', line)
-                        if match:
-                            yield {
-                                'database': 'redis',
-                                'variant': variant,
-                                'benchmark': 'ycsb',
-                                'workload': workload,
-                                'metric_name': 'read_latency_avg',
-                                'metric_value': float(match.group(1)),
-                                'unit': 'us',
-                                'repetition': repetition,
-                            }
-
-        run_idx += 1
+        yield {
+            'database': 'redis',
+            'variant': variant,
+            'benchmark': 'ycsb',
+            'workload': workload,
+            'metric_name': 'throughput',
+            'metric_value': float(matches[-1]),
+            'unit': 'ops/sec',
+            'repetition': repetition,
+        }
 
 def parse_leveldb_bench_output(output: str, repetition: int) -> Iterator[dict]:
     """Parse LevelDB db_bench benchmark output.

@@ -20,7 +20,7 @@ build_duckdb arch="aarch64":
     ARCH="{{arch}}" DUCKDB_PLATFORM=linux_arm64_musl EXTENSION_STATIC_BUILD=1 DISABLE_PARQUET=1 DISABLE_CPP_UNITTESTS=1 make -j release
     # cmake ../.. -DCMAKE_TOOLCHAIN_FILE=../../../../utils/morello-toolchain.cmake -DCMAKE_BUILD_TYPE=Release -DDISABLE_UNITY=1 -DBUILD_EXTENSIONS="" -DBUILD_UNITTESTS=OFF -DBUILD_SHELL=ON -DENABLE_SANITIZER=OFF -DENABLE_UBSAN=OFF
   else
-    ARCH="aarch64" make -j release
+    ARCH="mte" make -j release
     ARCH="{{arch}}" make -j release
   fi
 
@@ -37,13 +37,7 @@ run_duckdb sf="100":
   #!/usr/bin/env bash
   set -eu pipefail
 
-  # Warmup phase - run all queries once to load OS cache
-  echo "=== Warmup phase ===" >&2
-  for q in `seq 1 22`
-  do
-    {{dbms_basedir}}/duckdb/build/release/duckdb {{dbms_basedir}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" &> /dev/null
-  done
-
+  echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
   # Run all release queries (warm cache)
   echo "=== Running release variant ===" >&2
   for q in `seq 1 22`
@@ -51,6 +45,7 @@ run_duckdb sf="100":
     {{dbms_basedir}}/duckdb/build/release/duckdb {{dbms_basedir}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
 
+  echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
   # Run all MTE queries (warm cache)
   echo "=== Running release-mte variant ===" >&2
   for q in `seq 1 22`
@@ -62,7 +57,7 @@ run_duckdb sf="100":
   echo "=== Running release-cold variant ===" >&2
   for q in `seq 1 22`
   do
-    echo 1 | sudo tee /proc/sys/vm/drop_caches > /dev/null
+    echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
     {{dbms_basedir}}/duckdb/build/release/duckdb {{dbms_basedir}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
 
@@ -70,7 +65,7 @@ run_duckdb sf="100":
   echo "=== Running release-mte-cold variant ===" >&2
   for q in `seq 1 22`
   do
-    echo 1 | sudo tee /proc/sys/vm/drop_caches > /dev/null
+    echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
     GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{dbms_basedir}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
 
@@ -86,19 +81,26 @@ build_redis:
   ARCH="aarch64" make -j
   ARCH="mte" make -j persist-settings
   ARCH="mte" make -j
-  make -j
+  #make -j
   # make distclean && make CC="${MORELLO_CLANG_DIR}/bin/clang" AR="${MORELLO_CLANG_DIR}/bin/ar" RANLIB="${MORELLO_CLANG_DIR}/bin/ranlib" MALLOC=libc USE_SYSTEMD=no BUILD_TLS=no OPTIMIZATION="-O3 -g" CFLAGS="-march=morello -mabi=purecap --target=aarch64-linux-musl_purecap --sysroot=${MORELLO_SYSROOT} -Wno-error" LDFLAGS="-L${MORELLO_LLVM_DIR}/lib -L${MORELLO_SYSROOT}/lib -static" -j
 
 # Run YCSB for redis
-run_redis:
+run_redis recordcount="10000" operationcount="10000":
   #!/usr/bin/env bash
   for suffix in "" "-mte"; do
+    if [[ -z "$suffix" ]]; then
+      variant="release"
+    else
+      variant="release-mte"
+    fi
     for l in a b c d e f
     do
       {{dbms_basedir}}/redis/src/redis-server${suffix} &> /dev/null &
 
-      ycsb.sh load redis -s -P {{dbms_basedir}}/workloads/YCSB/workload$l -p "redis.host=127.0.0.1" -p "redis.port=6379"
-      ycsb.sh run redis -s -P {{dbms_basedir}}/workloads/YCSB/workload$l -p "redis.host=127.0.0.1" -p "redis.port=6379"
+      echo "=== REDIS_YCSB workload=${l} variant=${variant} phase=load ==="
+      ycsb.sh load redis -s -P {{dbms_basedir}}/workloads/YCSB/workload$l -p "redis.host=127.0.0.1" -p "redis.port=6379" -p "recordcount={{recordcount}}"
+      echo "=== REDIS_YCSB workload=${l} variant=${variant} phase=run ==="
+      ycsb.sh run redis -s -P {{dbms_basedir}}/workloads/YCSB/workload$l -p "redis.host=127.0.0.1" -p "redis.port=6379" -p "recordcount={{recordcount}}" -p "operationcount={{operationcount}}"
 
       {{dbms_basedir}}/redis/src/redis-cli${suffix} shutdown
       rm -f {{dbms_basedir}}/redis/dump.rdb
