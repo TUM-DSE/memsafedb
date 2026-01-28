@@ -1,6 +1,7 @@
 dbms_basedir := source_dir()
 TPCH_SF := "10" # ~~2.5GB according to DuckDB website
-
+CHERI_HOST := "ace.dos.cit.tum.de"
+DATA_DIR := "/scratch/${USER}/memsafedb/data"
 
 help:
   just -l dbms
@@ -12,6 +13,16 @@ benchmark db="all" repetitions="1":
 # Generate plots from results
 plot:
   python3 {{dbms_basedir}}/../plots/dbms.py
+
+# Load data to local SSDs of this and remote hosts
+prepare_local_data:
+  #!/usr/bin/env bash
+  mkdir -p {{DATA_DIR}}
+  rsync -av {{dbms_basedir}}/tpch-sf*.db {{DATA_DIR}}
+  rsync -rav {{dbms_basedir}}/workloads {{DATA_DIR}}/
+  ssh {{CHERI_HOST}} "mkdir -p {{DATA_DIR}}"
+  rsync -av {{dbms_basedir}}/tpch-sf*.db {{CHERI_HOST}}:{{DATA_DIR}}
+  rsync -rav {{dbms_basedir}}/workloads {{CHERI_HOST}}:{{DATA_DIR}}/
 
 build_duckdb arch="aarch64":
   #!/usr/bin/env bash
@@ -42,7 +53,7 @@ run_duckdb sf="100":
   echo "=== Running release variant ===" >&2
   for q in `seq 1 22`
   do
-    {{dbms_basedir}}/duckdb/build/release/duckdb {{dbms_basedir}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+    {{dbms_basedir}}/duckdb/build/release/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{DATA_DIR}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
 
   echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
@@ -50,7 +61,7 @@ run_duckdb sf="100":
   echo "=== Running release-mte variant ===" >&2
   for q in `seq 1 22`
   do
-    GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{dbms_basedir}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+    GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{DATA_DIR}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
 
   # Run all release queries (cold cache - drop caches before each query)
@@ -58,7 +69,7 @@ run_duckdb sf="100":
   for q in `seq 1 22`
   do
     echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
-    {{dbms_basedir}}/duckdb/build/release/duckdb {{dbms_basedir}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+    {{dbms_basedir}}/duckdb/build/release/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{DATA_DIR}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
 
   # Run all MTE queries (cold cache - drop caches before each query)
@@ -66,7 +77,7 @@ run_duckdb sf="100":
   for q in `seq 1 22`
   do
     echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
-    GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{dbms_basedir}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+    GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{DATA_DIR}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
 
 clean_duckdb:
@@ -76,36 +87,133 @@ clean_duckdb:
 
 build_redis:
   #!/usr/bin/env bash
+  set -euo pipefail
   cd {{dbms_basedir}}/redis
-  ARCH="aarch64" make -j persist-settings
-  ARCH="aarch64" make -j
-  ARCH="mte" make -j persist-settings
-  ARCH="mte" make -j
-  #make -j
-  # make distclean && make CC="${MORELLO_CLANG_DIR}/bin/clang" AR="${MORELLO_CLANG_DIR}/bin/ar" RANLIB="${MORELLO_CLANG_DIR}/bin/ranlib" MALLOC=libc USE_SYSTEMD=no BUILD_TLS=no OPTIMIZATION="-O3 -g" CFLAGS="-march=morello -mabi=purecap --target=aarch64-linux-musl_purecap --sysroot=${MORELLO_SYSROOT} -Wno-error" LDFLAGS="-L${MORELLO_LLVM_DIR}/lib -L${MORELLO_SYSROOT}/lib -static" -j
+
+  # Clean previous builds
+  make distclean &> /dev/null || true
+
+  # Function to build Redis for a specific target
+  # Usage: build_target <suffix> <arch_flag> <extra_make_flags>
+  build_target() {
+    local suffix="$1"
+    local arch_flag="$2"
+    local extra_flags="$3"
+    local log_file="/tmp/build_redis_${suffix}.log"
+
+    echo -n "Building Target: $suffix ... "
+
+    # Clean build state
+    make distclean &> /dev/null || true
+
+    # Build with specified architecture
+    if ! eval ARCH="$arch_flag" make -j persist-settings $extra_flags > "$log_file" 2>&1; then
+      echo "FAILED (persist-settings). Output:"
+      cat "$log_file"
+      rm -f "$log_file"
+      return 1
+    fi
+
+    if ! eval ARCH="$arch_flag" make -j $extra_flags > "$log_file" 2>&1; then
+      echo "FAILED (build). Output:"
+      cat "$log_file"
+      rm -f "$log_file"
+      return 1
+    fi
+
+    echo "SUCCESS"
+    rm -f "$log_file"
+  }
+
+  # AArch64 Static (CHERI baseline) - Uses environment variables from flake.nix
+  build_target "static" "static" ""
+
+  # CHERI Purecap - Uses environment variables from flake.nix
+  build_target "cheri" "cheri" ""
+
+  # MTE - Uses ARCH flag
+  build_target "mte" "mte" ""
+
+  # AArch64 Dynamic (MTE baseline) - Uses ARCH flag
+  build_target "dynamic" "aarch64" ""
 
 # Run YCSB for redis
 run_redis recordcount="10000" operationcount="10000":
   #!/usr/bin/env bash
-  for suffix in "" "-mte"; do
-    if [[ -z "$suffix" ]]; then
-      variant="release"
-    else
-      variant="release-mte"
-    fi
-    for l in a b c d e f
-    do
-      {{dbms_basedir}}/redis/src/redis-server${suffix} &> /dev/null &
+  set -euo pipefail
 
-      echo "=== REDIS_YCSB workload=${l} variant=${variant} phase=load ==="
-      ycsb.sh load redis -s -P {{dbms_basedir}}/workloads/YCSB/workload$l -p "redis.host=127.0.0.1" -p "redis.port=6379" -p "recordcount={{recordcount}}"
-      echo "=== REDIS_YCSB workload=${l} variant=${variant} phase=run ==="
-      ycsb.sh run redis -s -P {{dbms_basedir}}/workloads/YCSB/workload$l -p "redis.host=127.0.0.1" -p "redis.port=6379" -p "recordcount={{recordcount}}" -p "operationcount={{operationcount}}"
-
-      {{dbms_basedir}}/redis/src/redis-cli${suffix} shutdown
-      rm -f {{dbms_basedir}}/redis/dump.rdb
-    done
+  for variant in "dynamic" "mte" "static" "cheri"; do
+    case "$variant" in
+      "dynamic" | "mte")
+        just dbms run_redis_local "$variant" "{{recordcount}}" "{{operationcount}}"
+        ;;
+      "static" | "cheri")
+        if [[ "$variant" == "static" ]]; then
+          devshell="ace-aarch64"
+        else
+          devshell="ace-cheri"
+        fi
+        ssh ace "cd {{dbms_basedir}} && nix --extra-experimental-features flakes --extra-experimental-features nix-command develop .#${devshell} -c just dbms run_redis_local '$variant' '{{recordcount}}' '{{operationcount}}'"
+        ;;
+    esac
   done
+
+run_redis_local variant recordcount operationcount:
+  #!/usr/bin/env bash
+  set -euo pipefail
+
+  workloads_dir="{{DATA_DIR}}/workloads/YCSB"
+
+  case "{{variant}}" in
+    "dynamic")
+      suffix=""
+      ;;
+    "mte")
+      suffix="-mte"
+      ;;
+    "static")
+      suffix="-static"
+      ;;
+    "cheri")
+      suffix="-cheri"
+      ;;
+  esac
+
+  if [[ "{{variant}}" == "mte" ]]; then
+    server_env="GLIBC_TUNABLES=glibc.mem.tagging=3"
+  else
+    server_env=""
+  fi
+  redis_server="{{dbms_basedir}}/redis/src/redis-server${suffix}"
+  redis_cli="{{dbms_basedir}}/redis/src/redis-cli${suffix}"
+  
+  for workload in a b c d e f; do
+    echo "=== Running workload${workload} - {{variant}} ==="
+
+    eval ${server_env} ${redis_server} --dir {{DATA_DIR}} --ignore-warnings ARM64-COW-BUG &> /dev/null &
+    server_pid=$!
+
+    sleep 1
+
+    echo "=== REDIS_YCSB workload=${workload} variant={{variant}} phase=load ==="
+    ycsb.sh load redis -s -P ${workloads_dir}/workload${workload} \
+      -p "redis.host=127.0.0.1" \
+      -p "redis.port=6379" \
+      -p "recordcount={{recordcount}}"
+
+    echo "=== REDIS_YCSB workload=${workload} variant={{variant}} phase=run ==="
+    ycsb.sh run redis -s -P ${workloads_dir}/workload${workload} \
+      -p "redis.host=127.0.0.1" \
+      -p "redis.port=6379" \
+      -p "recordcount={{recordcount}}" \
+      -p "operationcount={{operationcount}}"
+
+    ${redis_cli} shutdown || kill ${server_pid} &> /dev/null || true
+    rm -f {{DATA_DIR}}/dump.rdb
+
+    wait ${server_pid} 2> /dev/null || true
+  done
+
 
 build_leveldb:
   #!/usr/bin/env bash

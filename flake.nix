@@ -117,6 +117,7 @@
           buildInputs = with pkgs; [
             clang
             glibc-mte.out
+            pkgsStatic.lld
             #doctor-pkgs.clang-morello
             #doctor-pkgs.musl-morello-purecap
             #doctor-pkgs.llvm-morello-purecap
