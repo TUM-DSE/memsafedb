@@ -108,6 +108,7 @@
             #malloc-mte
           ] ++ sharedPkgs;
           MTE_MALLOC= "${malloc-mte}/lib/libhardened_malloc.so";
+          GLIBC_MTE = "${glibc-mte}";
           MYSQL_JDBC_JAR = mysql_jdbc_jar;
           NIX_ENFORCE_NO_NATIVE="0";
           SYSBENCH_PATH="${pkgs.sysbench}";
@@ -132,6 +133,7 @@
           BASE_SYSROOT = "${pkgs.pkgsStatic.musl}/lib";
           BASE_HDRS = "${pkgs.pkgsStatic.musl.dev}";
           MTE_MALLOC= "${malloc-mte}/lib/libhardened_malloc.so";
+          GLIBC_MTE = "${glibc-mte}";
           NIX_ENFORCE_NO_NATIVE="0";
           MYSQL_JDBC_JAR = mysql_jdbc_jar;
         };

@@ -441,6 +441,11 @@ run_sqlite_eliza warehouses="1" duration="60" clients="1":
     cp "$(dirname "$(which py-tpcc)")/../lib/py-tpcc/tpcc.sql" "${ddl_path}"
   fi
 
+  if [[ -z "$GLIBC_MTE" ]]; then
+    echo "Error: MTE-enabled glibc not found. GLIBC_MTE must be set" >&2
+    exit 1
+  fi
+
   mkdir -p "{{DATA_DIR}}/sqlite"
   for suffix in "dynamic" "mte"; do
     echo "=== Executing $suffix ==="
@@ -452,18 +457,18 @@ run_sqlite_eliza warehouses="1" duration="60" clients="1":
 
     tunables=""
     preload="${run_root}/libsqlite3.so"
+    ld_library_path=""
     if [[ "${suffix}" == "mte" ]]; then
       tunables="glibc.mem.tagging=3"
-      preload="${run_root}/libsqlite3.so:${MTE_MALLOC}"
+      ld_library_path="${GLIBC_MTE}/lib"
     fi
 
     printf "[sqlite]\ndatabase = ${db_path}\n" > "${config_path}"
 
     export PATH="${run_root}:${PATH}"
-    export LD_PRELOAD="${preload}"
 
     cd "${run_root}"
-    GLIBC_TUNABLES="${tunables}" py-tpcc --warehouses "{{warehouses}}" --duration "{{duration}}" --clients "{{clients}}" --ddl "${ddl_path}" --config "${config_path}" sqlite
+    LD_LIBRARY_PATH="${ld_library_path}" LD_PRELOAD="${preload}" GLIBC_TUNABLES="${tunables}" py-tpcc --warehouses "{{warehouses}}" --duration "{{duration}}" --clients "{{clients}}" --ddl "${ddl_path}" --config "${config_path}" sqlite
 
     rm -f "${db_path}" "${db_path}-journal" "${db_path}-wal" "${db_path}-shm"
   done
