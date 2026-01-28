@@ -130,6 +130,7 @@
           BASE_UNWIND_DIR = "${pkgs.pkgsStatic.llvmPackages.libunwind}";
           BASE_SYSROOT = "${pkgs.pkgsStatic.musl}/lib";
           BASE_HDRS = "${pkgs.pkgsStatic.musl.dev}";
+          MTE_MALLOC= "${malloc-mte}/lib/libhardened_malloc.so";
           NIX_ENFORCE_NO_NATIVE="0";
           MYSQL_JDBC_JAR = mysql_jdbc_jar;
         };
