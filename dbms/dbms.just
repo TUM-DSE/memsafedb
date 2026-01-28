@@ -340,40 +340,110 @@ run_sqlite warehouses="1" duration="60" clients="1":
     rm -f "${db_path}" "${db_path}-journal" "${db_path}-wal" "${db_path}-shm"
   done
 
+setup_ladybug sf="10":
+  #!/usr/bin/env python
+  import os
+  import shutil
+  import glob
+  import subprocess
+  import gzip
+
+  sf = "{{sf}}"
+  base_dir = "{{dbms_basedir}}/ladybug/dataset"
+  target_dir = os.path.join(base_dir, f"ldbc-sf{sf}")
+
+  if os.path.exists(target_dir) and os.listdir(target_dir):
+    print(f"Dataset for SF{sf} already exists in {target_dir}")
+    exit(0)
+
+  url = f"https://datasets.ldbcouncil.org/snb-interactive-v1/social_network-sf{sf}-CsvBasic-StringDateFormatter.tar.zst"
+  archive = f"social_network-sf{sf}-CsvBasic-StringDateFormatter.tar.zst"
+
+  print(f"Downloading {url}...")
+  subprocess.run(["wget", "-q", "--show-progress", url], check=True)
+
+  print(f"Extracting {archive}...")
+  subprocess.run(["tar", "--use-compress-program=unzstd", "-xf", archive], check=True)
+
+  extracted_dir = archive.replace(".tar.zst", "")
+  os.makedirs(target_dir, exist_ok=True)
+
+  print("Organizing files...")
+
+  for section in ["dynamic", "static"]:
+    section_path = os.path.join(extracted_dir, section)
+    if not os.path.exists(section_path):
+      continue
+
+    for item in os.listdir(section_path):
+      source_path = os.path.join(section_path, item)
+      if os.path.isfile(source_path):
+        shutil.move(source_path, os.path.join(target_dir, item))
+
+  # Cleanup
+  shutil.rmtree(extracted_dir)
+  os.remove(archive)
+
 build_ladybug:
   #!/usr/bin/env bash
   cd {{dbms_basedir}}/ladybug
-  ARCH=aarch64 make -j release
-  ARCH=aarch64 make -j python
+  export EXTRA_CMAKE_FLAGS="-DBUILD_BENCHMARK=TRUE"
+  ARCH=dynamic make clean
+  ARCH=dynamic make -j release
+  ARCH=dynamic make -j python
+  ARCH=mte make clean
   ARCH=mte make -j release
   ARCH=mte make -j python
+  ARCH=cheri make clean
+  ARCH=cheri make -j release
+  ARCH=cheri make -j python
+  ARCH=static make clean
+  ARCH=static make -j release
+  ARCH=static make -j python
 
-run_ladybug threads="":
+run_ladybug_ace threads="4" sf="10":
   #!/usr/bin/env bash
   set -eu pipefail
-  dataset_dir="{{dbms_basedir}}/ladybug/dataset/lsqb-sf01"
-  csv_root="{{dbms_basedir}}/ladybug/build/lsqb-data"
-  mkdir -p "${csv_root}/lsqb-datasets"
-  ln -sfn "${dataset_dir}" "${csv_root}/lsqb-datasets/social-network-sf0.1-projected-fk"
-  export CSV_DIR="${csv_root}"
-  export SCALE_FACTOR="0.1"
-  if [[ -n "{{threads}}" ]]; then
-    export NUM_THREADS="{{threads}}"
-  fi
-  for suffix in "" "-mte"; do
-    tunables=""
-    if [[ "${suffix}" == "-mte" ]]; then
-      tunables="glibc.mem.tagging=3"
-    fi
-    build_root="{{dbms_basedir}}/ladybug/build${suffix}"
-    serialized_root="${build_root}/lsqb-serialized"
+  export CSV_DIR="{{dbms_basedir}}/ladybug/dataset/"
+  export SCALE_FACTOR="{{sf}}"
+  for suffix in "static" "cheri"; do
+    build_root="{{dbms_basedir}}/ladybug/build-${suffix}"
+    serialized_root="${build_root}/ldbc-serialized"
     rm -rf "${serialized_root}"
     mkdir -p "${serialized_root}"
     export SERIALIZED_DIR="${serialized_root}"
-    PYTHONPATH="{{dbms_basedir}}/ladybug/tools/python_api/tools/python_api/build${suffix}:${PYTHONPATH:-}" GLIBC_TUNABLES="${tunables}" \
-      python3 {{dbms_basedir}}/ladybug/benchmark/lsqb/benchmark_runner.py
+    echo "=== Executing $suffix - threads: {{threads}} ==="
+    PYTHONPATH="{{dbms_basedir}}/ladybug/tools/python_api/tools/python_api/build-${suffix}:${PYTHONPATH:-}" \
+      DRY_RUN=true python3 {{dbms_basedir}}/ladybug/benchmark/benchmark_runner.py --dataset ldbc-sf{{sf}} --thread {{threads}}
     rm lsqb.log
   done
+
+run_ladybug_eliza threads="4" sf="10":
+  #!/usr/bin/env bash
+  set -eu pipefail
+  export CSV_DIR="{{dbms_basedir}}/ladybug/dataset/"
+  export SCALE_FACTOR="{{sf}}"
+  for suffix in "dynamic" "mte"; do
+    tunables=""
+    if [[ "${suffix}" == "mte" ]]; then
+      tunables="glibc.mem.tagging=3"
+    fi
+    build_root="{{dbms_basedir}}/ladybug/build-${suffix}"
+    serialized_root="${build_root}/ldbc-serialized"
+    rm -rf "${serialized_root}"
+    mkdir -p "${serialized_root}"
+    export SERIALIZED_DIR="${serialized_root}"
+    echo "=== Executing $suffix - threads: {{threads}} ==="
+    PYTHONPATH="{{dbms_basedir}}/ladybug/tools/python_api/tools/python_api/build-${suffix}:${PYTHONPATH:-}" GLIBC_TUNABLES="${tunables}" \
+      DRY_RUN=true python3 {{dbms_basedir}}/ladybug/benchmark/benchmark_runner.py --dataset ldbc-sf{{sf}} --thread {{threads}}
+  done
+
+run_ladybug threads="4" sf="10":
+  #!/usr/bin/env bash
+  just -f {{dbms_basedir}}/dbms.just setup_ladybug "{{sf}}"
+  just -f {{dbms_basedir}}/dbms.just run_ladybug_eliza "{{threads}}" "{{sf}}"
+  ssh ace "nix develop {{dbms_basedir}}/..#ace-aarch64 --command just -f {{dbms_basedir}}/dbms.just setup_ladybug {{sf}}"
+  ssh ace "nix develop {{dbms_basedir}}/..#ace-cheri --command just -f {{dbms_basedir}}/dbms.just run_ladybug_ace {{threads}} {{sf}}"
 
 build_mysql:
   #!/usr/bin/env bash

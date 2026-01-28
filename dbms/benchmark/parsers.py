@@ -697,7 +697,7 @@ def parse_ladybug_output(output: str, repetition: int) -> Iterator[dict]:
     """
     query_pattern = re.compile(r'Running query\s+(\d+)', re.IGNORECASE)
     time_pattern = re.compile(r'Execution time \(s\):\s+([\d.]+)', re.IGNORECASE)
-    variants = ['release', 'release-mte']
+    variants = ['release-dynamic', 'release-mte', 'release-static', 'release-cheri']
 
     run_idx = 0
     current_query = None
