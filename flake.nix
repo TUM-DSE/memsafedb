@@ -85,6 +85,7 @@
       sysbench
       snappy
       tcl
+      icu
     ];
   in
   {
@@ -136,6 +137,7 @@
           GLIBC_MTE = "${glibc-mte}";
           NIX_ENFORCE_NO_NATIVE="0";
           MYSQL_JDBC_JAR = mysql_jdbc_jar;
+          SYSBENCH_PATH="${pkgs.sysbench}";
         };
         "ace-aarch64" = pkgs.mkShell {
           name="memsafedb-devshell-ace-hybrid";
