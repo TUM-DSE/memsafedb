@@ -8,7 +8,7 @@ help:
 
 # Run benchmarks and collect results to CSV
 benchmark db="all" repetitions="1":
-  python3 {{dbms_basedir}}/benchmark/run_benchmarks.py --db "{{db}}" --repetitions "{{repetitions}}"
+  python3 {{dbms_basedir}}/benchmark/run_benchmarks.py --db "{{db}}" --repetitions "{{repetitions}}" --append
 
 # Generate plots from results
 plot:
