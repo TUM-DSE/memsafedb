@@ -21,15 +21,15 @@ mpl.rcParams["ps.fonttype"] = 42
 mpl.rcParams["font.family"] = "libertine"
 
 
-#mpl.rcParams.update({
-#        "text.usetex": True,
-#        "font.family": "serif",
-#        "font.serif": ["Linux Libertine O"],
-#        "text.latex.preamble": r"""
-#    \usepackage[tt=false, type1=true]{libertine}
-#    \usepackage[libertine]{newtxmath}
-#    """
-#})
+mpl.rcParams.update({
+       "text.usetex": True,
+       "font.family": "serif",
+       "font.serif": ["Linux Libertine O"],
+       "text.latex.preamble": r"""
+   \usepackage[tt=false, type1=true]{libertine}
+   \usepackage[libertine]{newtxmath}
+   """
+})
 
 # 3.3 inch for single column, 7 inch for double column
 figwidth_third = 2

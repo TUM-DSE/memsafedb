@@ -2,6 +2,28 @@
 """DBMS benchmark plotting script."""
 from common import *
 
+BASELINE_COLOR = 'tab:blue'
+MTE_COLOR = 'tab:orange'
+BASELINE_HATCH = ''
+MTE_HATCH = '///'
+
+def add_two_item_legend(fig, left_label: str, right_label: str, loc: str = 'upper left', bbox_to_anchor: tuple = (0.03, 0.97)):
+    handles = [
+        mpl.patches.Patch(facecolor=BASELINE_COLOR, edgecolor='black', label=left_label),
+        mpl.patches.Patch(facecolor=MTE_COLOR, edgecolor='black', hatch=MTE_HATCH, label=right_label),
+    ]
+    fig.legend(
+        handles=handles,
+        fontsize=FONTSIZE - 2,
+        loc=loc,
+        ncol=2,
+        bbox_to_anchor=bbox_to_anchor,
+    )
+
+
+def spaced_positions(count: int, spacing: float = 1.2) -> np.ndarray:
+    return np.arange(count) * spacing
+
 
 def load_dbms_data() -> pd.DataFrame:
     """Load DBMS benchmark results from CSV."""
@@ -48,8 +70,8 @@ def plot_grouped_bars(
     # Sort workloads naturally (q1, q2, ... q10, q11, etc.)
     pivot = pivot.reindex(natsorted(pivot.index, alg=ns.NUMAFTER))
 
-    x = np.arange(len(pivot))
-    width = 0.35
+    x = spaced_positions(len(pivot))
+    width = 0.5
 
     # Get column names dynamically
     variants = pivot.columns.tolist()
@@ -72,21 +94,21 @@ def plot_grouped_bars(
         pivot[baseline_var],
         width,
         label='Baseline',
-        color=baseline_color,
+        color=BASELINE_COLOR,
         edgecolor='black',
-        hatch=baseline_hatch,
+        hatch=BASELINE_HATCH,
     )
     bars2 = ax.bar(
         x + width / 2,
         pivot[mte_var],
         width,
         label='MTE',
-        color=sys_color,
+        color=MTE_COLOR,
         edgecolor='black',
-        hatch=sys_hatch,
+        hatch=MTE_HATCH,
     )
 
-    ax.set_ylabel(ylabel, fontsize=FONTSIZE)
+    ax.set_ylabel(ylabel, fontsize=FONTSIZE, labelpad=1)
     ax.set_xticks(x)
     ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
 
@@ -96,15 +118,18 @@ def plot_grouped_bars(
     elif len(pivot) > 6:
         ax.tick_params(axis='x', labelrotation=30)
 
-    ax.legend(fontsize=FONTSIZE - 1, loc='upper right')
+    add_two_item_legend(fig, 'Baseline', 'MTE')
 
     # Add better/worse indicator
     indicator = higher_better_str if higher_is_better else lower_better_str
-    ax.annotate(
+    ax.text(
+        0.5,
+        0.94,
         indicator,
         color='blue',
-        xy=(0.02, 0.92),
-        xycoords='axes fraction',
+        ha='center',
+        va='top',
+        transform=ax.transAxes,
         fontsize=FONTSIZE - 1,
     )
 
@@ -458,44 +483,62 @@ def plot_redis_ycsb(df: pd.DataFrame):
     else:
         dynamic_var, mte_var, static_var, cheri_var = variant_order_old
 
-    x = np.arange(len(pivot))
-    width = 0.35
+    x = spaced_positions(len(pivot))
+    width = 0.5
 
     # Plot 1: Dynamic vs MTE
     if dynamic_var in pivot.columns and mte_var in pivot.columns:
         fig, ax = plt.subplots(figsize=(figwidth_half, fig_height * 1.3))
 
-        ax.bar(
+        bars_baseline = ax.bar(
             x - width / 2,
             pivot[dynamic_var],
             width,
             label='Dynamic',
-            color=baseline_color,
+            color=BASELINE_COLOR,
             edgecolor='black',
-            hatch='',
+            hatch=BASELINE_HATCH,
         )
-        ax.bar(
+        bars_mte = ax.bar(
             x + width / 2,
             pivot[mte_var],
             width,
             label='MTE',
-            color=sys_color,
+            color=MTE_COLOR,
             edgecolor='black',
-            hatch='///',
+            hatch=MTE_HATCH,
         )
-        ax.set_ylabel('Throughput (ops/sec)', fontsize=FONTSIZE)
+        ax.set_ylabel('Throughput (ops/sec)', fontsize=FONTSIZE, labelpad=1)
         ax.set_xticks(x)
         ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
         ax.tick_params(axis='x', labelrotation=30)
-        ax.legend(fontsize=FONTSIZE - 1, loc='upper right')
-        ax.annotate(
+        ax.set_title('YCSB (Non-MTE vs MTE)', fontsize=FONTSIZE, pad=10)
+        ax.text(
+            0.5,
+            1.12,
             higher_better_str,
             color='blue',
-            xy=(0.02, 0.92),
-            xycoords='axes fraction',
+            ha='center',
+            va='top',
+            transform=ax.transAxes,
             fontsize=FONTSIZE - 1,
         )
+        add_two_item_legend(fig, 'Dynamic', 'MTE')
         ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers))
+        for base_val, mte_val, bar in zip(pivot[dynamic_var], pivot[mte_var], bars_mte):
+            if base_val > 0 and mte_val > 0:
+                pct = (mte_val / base_val - 1.0) * 100.0
+                sign = '+' if pct >= 0 else '-'
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    bar.get_height(),
+                    f"${sign}{abs(pct):.0f}\\%$",
+                    ha='center',
+                    va='bottom',
+                    fontsize=FONTSIZE - 2,
+                )
+        ymax = max(pivot[dynamic_var].max(), pivot[mte_var].max())
+        ax.set_ylim(0, ymax * 1.2)
 
         plt.tight_layout()
         plt.savefig(
@@ -510,37 +553,55 @@ def plot_redis_ycsb(df: pd.DataFrame):
     if static_var in pivot.columns and cheri_var in pivot.columns:
         fig, ax = plt.subplots(figsize=(figwidth_half, fig_height * 1.3))
 
-        ax.bar(
+        bars_baseline = ax.bar(
             x - width / 2,
             pivot[static_var],
             width,
             label='Static',
-            color='#90EE90',
+            color=BASELINE_COLOR,
             edgecolor='black',
-            hatch='\\\\\\',
+            hatch=BASELINE_HATCH,
         )
-        ax.bar(
+        bars_mte = ax.bar(
             x + width / 2,
             pivot[cheri_var],
             width,
             label='CHERI',
-            color='#FFB6C1',
+            color=MTE_COLOR,
             edgecolor='black',
-            hatch='|||',
+            hatch=MTE_HATCH,
         )
-        ax.set_ylabel('Throughput (ops/sec)', fontsize=FONTSIZE)
+        ax.set_ylabel('Throughput (ops/sec)', fontsize=FONTSIZE, labelpad=1)
         ax.set_xticks(x)
         ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
         ax.tick_params(axis='x', labelrotation=30)
-        ax.legend(fontsize=FONTSIZE - 1, loc='upper right')
-        ax.annotate(
+        ax.set_title('YCSB (Static vs CHERI)', fontsize=FONTSIZE, pad=10)
+        ax.text(
+            0.5,
+            1.12,
             higher_better_str,
             color='blue',
-            xy=(0.02, 0.92),
-            xycoords='axes fraction',
+            ha='center',
+            va='top',
+            transform=ax.transAxes,
             fontsize=FONTSIZE - 1,
         )
+        add_two_item_legend(fig, 'Static', 'CHERI')
         ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers))
+        for base_val, mte_val, bar in zip(pivot[static_var], pivot[cheri_var], bars_mte):
+            if base_val > 0 and mte_val > 0:
+                pct = (mte_val / base_val - 1.0) * 100.0
+                sign = '+' if pct >= 0 else '-'
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    bar.get_height(),
+                    f"${sign}{abs(pct):.0f}\\%$",
+                    ha='center',
+                    va='bottom',
+                    fontsize=FONTSIZE - 2,
+                )
+        ymax = max(pivot[static_var].max(), pivot[cheri_var].max())
+        ax.set_ylim(0, ymax * 1.2)
 
         plt.tight_layout()
         plt.savefig(
@@ -611,118 +672,183 @@ def plot_sqlite_tpcc(df: pd.DataFrame):
 
 def plot_mysql_sysbench(df: pd.DataFrame):
     """Plot MySQL sysbench TPS and latency."""
-    # Plot TPS
-    data = df[
+    tps_data = df[
         (df['database'] == 'mysql') &
         (df['benchmark'] == 'sysbench') &
         (df['metric_name'] == 'tps')
     ]
 
-    if data.empty:
+    if tps_data.empty:
         print("No data for mysql/sysbench/tps")
         return
 
-    fig, axes = plt.subplots(1, 3, figsize=(figwidth_half * 2.2, fig_height * 1.3))
+    fig, axes = plt.subplots(
+        1,
+        2,
+        figsize=(figwidth_half, fig_height),
+        gridspec_kw={"width_ratios": [1, 2]},
+    )
 
-    # TPS subplot
+    def resolve_variants(available):
+        if 'release' in available and 'release-mte' in available:
+            return 'release', 'release-mte'
+        if 'release-dynamic' in available and 'release-mte' in available:
+            return 'release-dynamic', 'release-mte'
+        return available[0], available[-1]
+
+    def annotate_pct(ax, bar, baseline, mte):
+        if baseline <= 0 or mte <= 0:
+            return
+        pct = (mte / baseline - 1.0) * 100.0
+        sign = '+' if pct >= 0 else '-'
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height(),
+            f"${sign}{abs(pct):.0f}\\%$",
+            ha='center',
+            va='bottom',
+            fontsize=FONTSIZE - 1,
+        )
+
+    # Throughput subplot
     ax = axes[0]
-    grouped = data.groupby('variant')['metric_value'].agg(['mean', 'std']).reset_index()
+    grouped = tps_data.groupby('variant')['metric_value'].agg(['mean', 'std']).reset_index()
     grouped = grouped.sort_values('variant')
-
     variants = grouped['variant'].tolist()
-    x = np.arange(len(variants))
+    baseline_var, mte_var = resolve_variants(variants)
 
-    colors = [baseline_color if 'mte' not in v else sys_color for v in variants]
-    hatches = [baseline_hatch if 'mte' not in v else sys_hatch for v in variants]
-    labels = ['Baseline' if 'mte' not in v else 'MTE' for v in variants]
+    baseline_mean = grouped.loc[grouped['variant'] == baseline_var, 'mean'].values[0]
+    baseline_std = grouped.loc[grouped['variant'] == baseline_var, 'std'].values[0]
+    mte_mean = grouped.loc[grouped['variant'] == mte_var, 'mean'].values[0]
+    mte_std = grouped.loc[grouped['variant'] == mte_var, 'std'].values[0]
 
-    bars = ax.bar(x, grouped['mean'], yerr=grouped['std'], color=colors, edgecolor='black', capsize=3)
-    for bar, hatch in zip(bars, hatches):
-        bar.set_hatch(hatch)
+    width = 0.5
+    x = np.array([0.0])
 
-    ax.set_ylabel('TPS', fontsize=FONTSIZE)
+    bars_baseline = ax.bar(
+        x - width / 2,
+        [baseline_mean],
+        width,
+        yerr=[baseline_std],
+        color=BASELINE_COLOR,
+        edgecolor='black',
+        capsize=3,
+    )
+    bars_mte = ax.bar(
+        x + width / 2,
+        [mte_mean],
+        width,
+        yerr=[mte_std],
+        color=MTE_COLOR,
+        edgecolor='black',
+        capsize=3,
+        hatch=MTE_HATCH,
+    )
+
+    annotate_pct(ax, bars_mte[0], baseline_mean, mte_mean)
+
+    ymax = max(baseline_mean + baseline_std, mte_mean + mte_std)
+    ax.set_ylim(0, ymax * 1.15)
+
+    ax.set_ylabel('TPS', fontsize=FONTSIZE, labelpad=1)
     ax.set_xticks(x)
-    ax.set_xticklabels(labels, fontsize=FONTSIZE - 1)
-    ax.set_title('Throughput', fontsize=FONTSIZE)
-    ax.annotate(
+    ax.set_xticklabels(["Throughput"], fontsize=FONTSIZE - 1)
+    ax.set_title('Throughput', fontsize=FONTSIZE, pad=10)
+    ax.text(
+        0.5,
+        1.16,
         higher_better_str,
         color='blue',
-        xy=(0.02, 0.92),
-        xycoords='axes fraction',
+        ha='center',
+        va='top',
+        transform=ax.transAxes,
         fontsize=FONTSIZE - 1,
     )
 
-    # Average latency subplot
+    # Latency subplot (avg + p95)
     ax = axes[1]
     lat_avg_data = df[
         (df['database'] == 'mysql') &
         (df['benchmark'] == 'sysbench') &
         (df['metric_name'] == 'latency_avg')
     ]
-
-    if not lat_avg_data.empty:
-        grouped = lat_avg_data.groupby('variant')['metric_value'].agg(['mean', 'std']).reset_index()
-        grouped = grouped.sort_values('variant')
-
-        variants = grouped['variant'].tolist()
-        x = np.arange(len(variants))
-
-        colors = [baseline_color if 'mte' not in v else sys_color for v in variants]
-        hatches = [baseline_hatch if 'mte' not in v else sys_hatch for v in variants]
-        labels = ['Baseline' if 'mte' not in v else 'MTE' for v in variants]
-
-        bars = ax.bar(x, grouped['mean'], yerr=grouped['std'], color=colors, edgecolor='black', capsize=3)
-        for bar, hatch in zip(bars, hatches):
-            bar.set_hatch(hatch)
-
-        ax.set_ylabel('Latency (ms)', fontsize=FONTSIZE)
-        ax.set_xticks(x)
-        ax.set_xticklabels(labels, fontsize=FONTSIZE - 1)
-        ax.set_title('Avg Latency', fontsize=FONTSIZE)
-        ax.annotate(
-            lower_better_str,
-            color='blue',
-            xy=(0.02, 0.92),
-            xycoords='axes fraction',
-            fontsize=FONTSIZE - 1,
-        )
-
-    # P95 latency subplot
-    ax = axes[2]
     lat_p95_data = df[
         (df['database'] == 'mysql') &
         (df['benchmark'] == 'sysbench') &
         (df['metric_name'] == 'latency_p95')
     ]
 
-    if not lat_p95_data.empty:
-        grouped = lat_p95_data.groupby('variant')['metric_value'].agg(['mean', 'std']).reset_index()
-        grouped = grouped.sort_values('variant')
+    if not lat_avg_data.empty or not lat_p95_data.empty:
+        grouped_avg = lat_avg_data.groupby('variant')['metric_value'].agg(['mean', 'std']).reset_index()
+        grouped_p95 = lat_p95_data.groupby('variant')['metric_value'].agg(['mean', 'std']).reset_index()
 
-        variants = grouped['variant'].tolist()
-        x = np.arange(len(variants))
+        avg_vars = grouped_avg['variant'].tolist()
+        p95_vars = grouped_p95['variant'].tolist()
+        variants = sorted(set(avg_vars + p95_vars))
+        baseline_var, mte_var = resolve_variants(variants)
 
-        colors = [baseline_color if 'mte' not in v else sys_color for v in variants]
-        hatches = [baseline_hatch if 'mte' not in v else sys_hatch for v in variants]
-        labels = ['Baseline' if 'mte' not in v else 'MTE' for v in variants]
+        avg_baseline = grouped_avg.loc[grouped_avg['variant'] == baseline_var, 'mean'].values[0]
+        avg_baseline_std = grouped_avg.loc[grouped_avg['variant'] == baseline_var, 'std'].values[0]
+        avg_mte = grouped_avg.loc[grouped_avg['variant'] == mte_var, 'mean'].values[0]
+        avg_mte_std = grouped_avg.loc[grouped_avg['variant'] == mte_var, 'std'].values[0]
 
-        bars = ax.bar(x, grouped['mean'], yerr=grouped['std'], color=colors, edgecolor='black', capsize=3)
-        for bar, hatch in zip(bars, hatches):
-            bar.set_hatch(hatch)
+        p95_baseline = grouped_p95.loc[grouped_p95['variant'] == baseline_var, 'mean'].values[0]
+        p95_baseline_std = grouped_p95.loc[grouped_p95['variant'] == baseline_var, 'std'].values[0]
+        p95_mte = grouped_p95.loc[grouped_p95['variant'] == mte_var, 'mean'].values[0]
+        p95_mte_std = grouped_p95.loc[grouped_p95['variant'] == mte_var, 'std'].values[0]
 
-        ax.set_ylabel('Latency (ms)', fontsize=FONTSIZE)
+        x = np.array([0.0, 1.2])
+
+        bars_baseline = ax.bar(
+            x - width / 2,
+            [avg_baseline, p95_baseline],
+            width,
+            yerr=[avg_baseline_std, p95_baseline_std],
+            color=BASELINE_COLOR,
+            edgecolor='black',
+            capsize=3,
+        )
+        bars_mte = ax.bar(
+            x + width / 2,
+            [avg_mte, p95_mte],
+            width,
+            yerr=[avg_mte_std, p95_mte_std],
+            color=MTE_COLOR,
+            edgecolor='black',
+            capsize=3,
+            hatch=MTE_HATCH,
+        )
+
+        annotate_pct(ax, bars_mte[0], avg_baseline, avg_mte)
+        annotate_pct(ax, bars_mte[1], p95_baseline, p95_mte)
+
+        ymax = max(
+            avg_baseline + avg_baseline_std,
+            avg_mte + avg_mte_std,
+            p95_baseline + p95_baseline_std,
+            p95_mte + p95_mte_std,
+        )
+        ax.set_ylim(0, ymax * 1.15)
+
+        ax.set_ylabel('Latency (ms)', fontsize=FONTSIZE, labelpad=1)
         ax.set_xticks(x)
-        ax.set_xticklabels(labels, fontsize=FONTSIZE - 1)
-        ax.set_title('P95 Latency', fontsize=FONTSIZE)
-        ax.annotate(
+        ax.set_xticklabels(['Avg', 'P95'], fontsize=FONTSIZE - 1)
+        ax.set_title('Latency', fontsize=FONTSIZE, pad=10)
+        ax.text(
+            0.5,
+            1.16,
             lower_better_str,
             color='blue',
-            xy=(0.02, 0.92),
-            xycoords='axes fraction',
+            ha='center',
+            va='top',
+            transform=ax.transAxes,
             fontsize=FONTSIZE - 1,
         )
 
+
     plt.tight_layout()
+    fig.subplots_adjust(wspace=0.5)
+    add_two_item_legend(fig, 'Baseline', 'MTE', loc='upper center', bbox_to_anchor=(0.53, 0.98))
     plt.savefig(
         os.path.join(result_dir, 'dbms_mysql_sysbench.pdf'),
         format='pdf',

@@ -86,6 +86,7 @@
       snappy
       tcl
       icu
+      texliveFull
     ];
   in
   {
@@ -176,6 +177,14 @@
           shellHook = ''
             source /morello/env/morello-sdk
           '';
+        };
+        "plot" = pkgs.mkShell {
+          name = "memsafedb-plot";
+            buildInputs = with pkgs; [
+              python3
+              python-pkgs
+              texliveFull
+            ];
         };
       };
     });
