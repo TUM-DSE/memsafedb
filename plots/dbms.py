@@ -53,8 +53,19 @@ def plot_grouped_bars(
 
     # Get column names dynamically
     variants = pivot.columns.tolist()
-    baseline_var = 'release' if 'release' in variants else variants[0]
-    mte_var = 'release-mte' if 'release-mte' in variants else variants[-1]
+
+    # Determine baseline and MTE variants based on available options
+    # Priority: release/release-mte > release-dynamic/release-mte > first/last
+    if 'release' in variants and 'release-mte' in variants:
+        baseline_var = 'release'
+        mte_var = 'release-mte'
+    elif 'release-dynamic' in variants and 'release-mte' in variants:
+        baseline_var = 'release-dynamic'
+        mte_var = 'release-mte'
+    else:
+        # Fallback to first and last (but this may not be correct)
+        baseline_var = variants[0]
+        mte_var = variants[-1]
 
     bars1 = ax.bar(
         x - width / 2,
@@ -143,8 +154,19 @@ def plot_duckdb_tpch(df: pd.DataFrame):
 
     # Get column names dynamically
     variants = pivot.columns.tolist()
-    baseline_var = 'release' if 'release' in variants else variants[0]
-    mte_var = 'release-mte' if 'release-mte' in variants else variants[-1]
+
+    # Determine baseline and MTE variants based on available options
+    # Priority: release/release-mte > release-dynamic/release-mte > first/last
+    if 'release' in variants and 'release-mte' in variants:
+        baseline_var = 'release'
+        mte_var = 'release-mte'
+    elif 'release-dynamic' in variants and 'release-mte' in variants:
+        baseline_var = 'release-dynamic'
+        mte_var = 'release-mte'
+    else:
+        # Fallback to first and last (but this may not be correct)
+        baseline_var = variants[0]
+        mte_var = variants[-1]
 
     bars1 = ax.bar(
         x - width / 2,
@@ -279,29 +301,255 @@ def plot_duckdb_tpch_cold(df: pd.DataFrame):
 
 
 def plot_leveldb_ycsb(df: pd.DataFrame):
-    """Plot LevelDB YCSB throughput."""
-    plot_grouped_bars(
-        df,
-        database='leveldb',
-        benchmark='ycsb',
-        metric='throughput',
-        ylabel='Throughput (ops/sec)',
-        filename='dbms_leveldb_ycsb.pdf',
-        higher_is_better=True,
+    """Plot LevelDB YCSB throughput: Dynamic vs MTE and Static vs CHERI as separate PDFs."""
+    data = df[
+        (df['database'] == 'leveldb') &
+        (df['benchmark'] == 'ycsb') &
+        (df['metric_name'] == 'throughput')
+    ]
+
+    if data.empty:
+        print("No data for leveldb/ycsb/throughput")
+        return
+
+    # Pivot to get all variants
+    pivot = data.pivot_table(
+        index='workload',
+        columns='variant',
+        values='metric_value',
+        aggfunc='mean'
     )
+
+    # Sort workloads naturally
+    pivot = pivot.reindex(natsorted(pivot.index, alg=ns.NUMAFTER))
+
+    # Check which naming scheme is used
+    variant_order = ['release-dynamic', 'release-mte', 'release-static', 'release-cheri']
+    variant_order_old = ['dynamic', 'mte', 'static', 'cheri']
+
+    if any(v in pivot.columns for v in variant_order):
+        dynamic_var, mte_var, static_var, cheri_var = variant_order
+    else:
+        dynamic_var, mte_var, static_var, cheri_var = variant_order_old
+
+    x = np.arange(len(pivot))
+    width = 0.35
+
+    # Plot 1: Dynamic vs MTE
+    if dynamic_var in pivot.columns and mte_var in pivot.columns:
+        fig, ax = plt.subplots(figsize=(figwidth_half, fig_height * 1.3))
+
+        ax.bar(
+            x - width / 2,
+            pivot[dynamic_var],
+            width,
+            label='Dynamic',
+            color=baseline_color,
+            edgecolor='black',
+            hatch='',
+        )
+        ax.bar(
+            x + width / 2,
+            pivot[mte_var],
+            width,
+            label='MTE',
+            color=sys_color,
+            edgecolor='black',
+            hatch='///',
+        )
+        ax.set_ylabel('Throughput (ops/sec)', fontsize=FONTSIZE)
+        ax.set_xticks(x)
+        ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
+        ax.tick_params(axis='x', labelrotation=30)
+        ax.legend(fontsize=FONTSIZE - 1, loc='upper right')
+        ax.annotate(
+            higher_better_str,
+            color='blue',
+            xy=(0.02, 0.92),
+            xycoords='axes fraction',
+            fontsize=FONTSIZE - 1,
+        )
+        ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers))
+
+        plt.tight_layout()
+        plt.savefig(
+            os.path.join(result_dir, 'dbms_leveldb_ycsb_dynamic_mte.pdf'),
+            format='pdf',
+            bbox_inches='tight',
+        )
+        plt.close()
+        print("Generated dbms_leveldb_ycsb_dynamic_mte.pdf")
+
+    # Plot 2: Static vs CHERI
+    if static_var in pivot.columns and cheri_var in pivot.columns:
+        fig, ax = plt.subplots(figsize=(figwidth_half, fig_height * 1.3))
+
+        ax.bar(
+            x - width / 2,
+            pivot[static_var],
+            width,
+            label='Static',
+            color='#90EE90',
+            edgecolor='black',
+            hatch='\\\\\\',
+        )
+        ax.bar(
+            x + width / 2,
+            pivot[cheri_var],
+            width,
+            label='CHERI',
+            color='#FFB6C1',
+            edgecolor='black',
+            hatch='|||',
+        )
+        ax.set_ylabel('Throughput (ops/sec)', fontsize=FONTSIZE)
+        ax.set_xticks(x)
+        ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
+        ax.tick_params(axis='x', labelrotation=30)
+        ax.legend(fontsize=FONTSIZE - 1, loc='upper right')
+        ax.annotate(
+            higher_better_str,
+            color='blue',
+            xy=(0.02, 0.92),
+            xycoords='axes fraction',
+            fontsize=FONTSIZE - 1,
+        )
+        ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers))
+
+        plt.tight_layout()
+        plt.savefig(
+            os.path.join(result_dir, 'dbms_leveldb_ycsb_static_cheri.pdf'),
+            format='pdf',
+            bbox_inches='tight',
+        )
+        plt.close()
+        print("Generated dbms_leveldb_ycsb_static_cheri.pdf")
 
 
 def plot_redis_ycsb(df: pd.DataFrame):
-    """Plot Redis YCSB throughput."""
-    plot_grouped_bars(
-        df,
-        database='redis',
-        benchmark='ycsb',
-        metric='throughput',
-        ylabel='Throughput (ops/sec)',
-        filename='dbms_redis_ycsb.pdf',
-        higher_is_better=True,
+    """Plot Redis YCSB throughput: Dynamic vs MTE and Static vs CHERI as separate PDFs."""
+    data = df[
+        (df['database'] == 'redis') &
+        (df['benchmark'] == 'ycsb') &
+        (df['metric_name'] == 'throughput')
+    ]
+
+    if data.empty:
+        print("No data for redis/ycsb/throughput")
+        return
+
+    # Pivot to get all variants
+    pivot = data.pivot_table(
+        index='workload',
+        columns='variant',
+        values='metric_value',
+        aggfunc='mean'
     )
+
+    # Sort workloads naturally
+    pivot = pivot.reindex(natsorted(pivot.index, alg=ns.NUMAFTER))
+
+    # Check which naming scheme is used
+    variant_order = ['release-dynamic', 'release-mte', 'release-static', 'release-cheri']
+    variant_order_old = ['dynamic', 'mte', 'static', 'cheri']
+
+    if any(v in pivot.columns for v in variant_order):
+        dynamic_var, mte_var, static_var, cheri_var = variant_order
+    else:
+        dynamic_var, mte_var, static_var, cheri_var = variant_order_old
+
+    x = np.arange(len(pivot))
+    width = 0.35
+
+    # Plot 1: Dynamic vs MTE
+    if dynamic_var in pivot.columns and mte_var in pivot.columns:
+        fig, ax = plt.subplots(figsize=(figwidth_half, fig_height * 1.3))
+
+        ax.bar(
+            x - width / 2,
+            pivot[dynamic_var],
+            width,
+            label='Dynamic',
+            color=baseline_color,
+            edgecolor='black',
+            hatch='',
+        )
+        ax.bar(
+            x + width / 2,
+            pivot[mte_var],
+            width,
+            label='MTE',
+            color=sys_color,
+            edgecolor='black',
+            hatch='///',
+        )
+        ax.set_ylabel('Throughput (ops/sec)', fontsize=FONTSIZE)
+        ax.set_xticks(x)
+        ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
+        ax.tick_params(axis='x', labelrotation=30)
+        ax.legend(fontsize=FONTSIZE - 1, loc='upper right')
+        ax.annotate(
+            higher_better_str,
+            color='blue',
+            xy=(0.02, 0.92),
+            xycoords='axes fraction',
+            fontsize=FONTSIZE - 1,
+        )
+        ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers))
+
+        plt.tight_layout()
+        plt.savefig(
+            os.path.join(result_dir, 'dbms_redis_ycsb_dynamic_mte.pdf'),
+            format='pdf',
+            bbox_inches='tight',
+        )
+        plt.close()
+        print("Generated dbms_redis_ycsb_dynamic_mte.pdf")
+
+    # Plot 2: Static vs CHERI
+    if static_var in pivot.columns and cheri_var in pivot.columns:
+        fig, ax = plt.subplots(figsize=(figwidth_half, fig_height * 1.3))
+
+        ax.bar(
+            x - width / 2,
+            pivot[static_var],
+            width,
+            label='Static',
+            color='#90EE90',
+            edgecolor='black',
+            hatch='\\\\\\',
+        )
+        ax.bar(
+            x + width / 2,
+            pivot[cheri_var],
+            width,
+            label='CHERI',
+            color='#FFB6C1',
+            edgecolor='black',
+            hatch='|||',
+        )
+        ax.set_ylabel('Throughput (ops/sec)', fontsize=FONTSIZE)
+        ax.set_xticks(x)
+        ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
+        ax.tick_params(axis='x', labelrotation=30)
+        ax.legend(fontsize=FONTSIZE - 1, loc='upper right')
+        ax.annotate(
+            higher_better_str,
+            color='blue',
+            xy=(0.02, 0.92),
+            xycoords='axes fraction',
+            fontsize=FONTSIZE - 1,
+        )
+        ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers))
+
+        plt.tight_layout()
+        plt.savefig(
+            os.path.join(result_dir, 'dbms_redis_ycsb_static_cheri.pdf'),
+            format='pdf',
+            bbox_inches='tight',
+        )
+        plt.close()
+        print("Generated dbms_redis_ycsb_static_cheri.pdf")
 
 
 def plot_sqlite_tpcc(df: pd.DataFrame):
@@ -485,16 +733,129 @@ def plot_mysql_sysbench(df: pd.DataFrame):
 
 
 def plot_ladybug_lsqb(df: pd.DataFrame):
-    """Plot Ladybug LSQB query times."""
-    plot_grouped_bars(
-        df,
-        database='ladybug',
-        benchmark='lsqb',
-        metric='query_time',
-        ylabel='Query Time (s)',
-        filename='dbms_ladybug_lsqb.pdf',
-        higher_is_better=False,
+    """Plot Ladybug LSQB query times: Dynamic vs MTE and Static vs CHERI as separate PDFs."""
+    data = df[
+        (df['database'] == 'ladybug') &
+        (df['benchmark'] == 'lsqb') &
+        (df['metric_name'] == 'query_time')
+    ]
+
+    if data.empty:
+        print("No data for ladybug/lsqb/query_time")
+        return
+
+    # Pivot to get all variants
+    pivot = data.pivot_table(
+        index='workload',
+        columns='variant',
+        values='metric_value',
+        aggfunc='mean'
     )
+
+    # Sort workloads naturally
+    pivot = pivot.reindex(natsorted(pivot.index, alg=ns.NUMAFTER))
+
+    # Check which naming scheme is used
+    variant_order = ['release-dynamic', 'release-mte', 'release-static', 'release-cheri']
+    variant_order_old = ['dynamic', 'mte', 'static', 'cheri']
+
+    if any(v in pivot.columns for v in variant_order):
+        dynamic_var, mte_var, static_var, cheri_var = variant_order
+    else:
+        dynamic_var, mte_var, static_var, cheri_var = variant_order_old
+
+    x = np.arange(len(pivot))
+    width = 0.35
+
+    # Plot 1: Dynamic vs MTE
+    if dynamic_var in pivot.columns and mte_var in pivot.columns:
+        fig, ax = plt.subplots(figsize=(figwidth_half, fig_height * 1.3))
+
+        ax.bar(
+            x - width / 2,
+            pivot[dynamic_var],
+            width,
+            label='Dynamic',
+            color=baseline_color,
+            edgecolor='black',
+            hatch='',
+        )
+        ax.bar(
+            x + width / 2,
+            pivot[mte_var],
+            width,
+            label='MTE',
+            color=sys_color,
+            edgecolor='black',
+            hatch='///',
+        )
+        ax.set_ylabel('Query Time (s)', fontsize=FONTSIZE)
+        ax.set_xticks(x)
+        ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
+        ax.tick_params(axis='x', labelrotation=30)
+        ax.legend(fontsize=FONTSIZE - 1, loc='upper right')
+        ax.annotate(
+            lower_better_str,
+            color='blue',
+            xy=(0.02, 0.92),
+            xycoords='axes fraction',
+            fontsize=FONTSIZE - 1,
+        )
+        ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers))
+
+        plt.tight_layout()
+        plt.savefig(
+            os.path.join(result_dir, 'dbms_ladybug_lsqb_dynamic_mte.pdf'),
+            format='pdf',
+            bbox_inches='tight',
+        )
+        plt.close()
+        print("Generated dbms_ladybug_lsqb_dynamic_mte.pdf")
+
+    # Plot 2: Static vs CHERI
+    if static_var in pivot.columns and cheri_var in pivot.columns:
+        fig, ax = plt.subplots(figsize=(figwidth_half, fig_height * 1.3))
+
+        ax.bar(
+            x - width / 2,
+            pivot[static_var],
+            width,
+            label='Static',
+            color='#90EE90',
+            edgecolor='black',
+            hatch='\\\\\\',
+        )
+        ax.bar(
+            x + width / 2,
+            pivot[cheri_var],
+            width,
+            label='CHERI',
+            color='#FFB6C1',
+            edgecolor='black',
+            hatch='|||',
+        )
+        ax.set_ylabel('Query Time (s)', fontsize=FONTSIZE)
+        ax.set_xticks(x)
+        ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
+        ax.tick_params(axis='x', labelrotation=30)
+        ax.legend(fontsize=FONTSIZE - 1, loc='upper right')
+        ax.annotate(
+            lower_better_str,
+            color='blue',
+            xy=(0.02, 0.92),
+            xycoords='axes fraction',
+            fontsize=FONTSIZE - 1,
+        )
+        ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers))
+
+        plt.tight_layout()
+        plt.savefig(
+            os.path.join(result_dir, 'dbms_ladybug_lsqb_static_cheri.pdf'),
+            format='pdf',
+            bbox_inches='tight',
+        )
+        plt.close()
+        print("Generated dbms_ladybug_lsqb_static_cheri.pdf")
 
 
 def plot_overhead_summary(df: pd.DataFrame):
@@ -506,10 +867,17 @@ def plot_overhead_summary(df: pd.DataFrame):
     overheads = []
 
     for (database, benchmark, workload), group in df_warm.groupby(['database', 'benchmark', 'workload']):
-        baseline = group[group['variant'] == 'release']['metric_value'].mean()
+        # Try different variant naming schemes
+        if 'release' in group['variant'].values:
+            baseline = group[group['variant'] == 'release']['metric_value'].mean()
+        elif 'release-dynamic' in group['variant'].values:
+            baseline = group[group['variant'] == 'release-dynamic']['metric_value'].mean()
+        else:
+            baseline = 0
+
         mte = group[group['variant'] == 'release-mte']['metric_value'].mean()
 
-        if baseline > 0 and mte > 0:
+        if baseline > 0 and mte > 0 and not (pd.isna(baseline) or pd.isna(mte)):
             # Get the primary metric for this benchmark
             metric = group['metric_name'].iloc[0]
 

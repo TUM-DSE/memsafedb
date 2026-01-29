@@ -191,22 +191,45 @@ def parse_redis_output(output: str, repetition: int) -> Iterator[dict]:
         r'REDIS_YCSB\s+workload=([a-f])\s+variant=([a-z0-9-]+)\s+phase=(load|run)',
         re.IGNORECASE,
     )
+    # Match the final [OVERALL], Throughput line from YCSB for accurate measurement
+    overall_throughput_pattern = re.compile(r'\[OVERALL\],\s*Throughput\(ops/sec\),\s*([0-9.]+)', re.IGNORECASE)
+    # Fallback to current ops/sec if OVERALL not found
     throughput_pattern = re.compile(r'operations;\s*([0-9.]+)\s+current ops/sec;')
 
     markers = list(marker_pattern.finditer(output))
     for idx, marker in enumerate(markers):
         workload = marker.group(1).lower()
-        variant = marker.group(2).lower()
+        variant_raw = marker.group(2).lower()
         phase = marker.group(3).lower()
         if phase != "run":
             continue
 
+        # Normalize variant names to match other databases (release-dynamic, release-mte, etc.)
+        if variant_raw == "dynamic":
+            variant = "release-dynamic"
+        elif variant_raw == "mte":
+            variant = "release-mte"
+        elif variant_raw == "static":
+            variant = "release-static"
+        elif variant_raw == "cheri":
+            variant = "release-cheri"
+        else:
+            variant = f"release-{variant_raw}"
+
         start = marker.end()
         end = markers[idx + 1].start() if idx + 1 < len(markers) else len(output)
         segment = output[start:end]
-        matches = throughput_pattern.findall(segment)
-        if not matches:
-            continue
+
+        # Try to find [OVERALL], Throughput first (more accurate)
+        overall_match = overall_throughput_pattern.search(segment)
+        if overall_match:
+            throughput = float(overall_match.group(1))
+        else:
+            # Fallback to last current ops/sec value
+            matches = throughput_pattern.findall(segment)
+            if not matches:
+                continue
+            throughput = float(matches[-1])
 
         yield {
             'database': 'redis',
@@ -214,7 +237,7 @@ def parse_redis_output(output: str, repetition: int) -> Iterator[dict]:
             'benchmark': 'ycsb',
             'workload': workload,
             'metric_name': 'throughput',
-            'metric_value': float(matches[-1]),
+            'metric_value': throughput,
             'unit': 'ops/sec',
             'repetition': repetition,
         }
