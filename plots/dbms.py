@@ -511,7 +511,6 @@ def plot_redis_ycsb(df: pd.DataFrame):
         ax.set_ylabel('Throughput (ops/sec)', fontsize=FONTSIZE, labelpad=1)
         ax.set_xticks(x)
         ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
-        ax.tick_params(axis='x', labelrotation=30)
         ax.set_title('YCSB (Non-MTE vs MTE)', fontsize=FONTSIZE, pad=10)
         ax.text(
             0.5,
@@ -523,7 +522,7 @@ def plot_redis_ycsb(df: pd.DataFrame):
             transform=ax.transAxes,
             fontsize=FONTSIZE - 1,
         )
-        add_two_item_legend(fig, 'Dynamic', 'MTE')
+        add_two_item_legend(fig, 'Non-MTE', 'MTE', loc='upper right', bbox_to_anchor=(0.97, 0.8))
         ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers))
         for base_val, mte_val, bar in zip(pivot[dynamic_var], pivot[mte_var], bars_mte):
             if base_val > 0 and mte_val > 0:
@@ -574,8 +573,7 @@ def plot_redis_ycsb(df: pd.DataFrame):
         ax.set_ylabel('Throughput (ops/sec)', fontsize=FONTSIZE, labelpad=1)
         ax.set_xticks(x)
         ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
-        ax.tick_params(axis='x', labelrotation=30)
-        ax.set_title('YCSB (Static vs CHERI)', fontsize=FONTSIZE, pad=10)
+        ax.set_title('YCSB (AArch64 vs CHERI)', fontsize=FONTSIZE, pad=10)
         ax.text(
             0.5,
             1.12,
@@ -586,7 +584,7 @@ def plot_redis_ycsb(df: pd.DataFrame):
             transform=ax.transAxes,
             fontsize=FONTSIZE - 1,
         )
-        add_two_item_legend(fig, 'Static', 'CHERI')
+        add_two_item_legend(fig, 'AArch64', 'CHERI', loc='upper right', bbox_to_anchor=(0.97, 0.8))
         ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers))
         for base_val, mte_val, bar in zip(pivot[static_var], pivot[cheri_var], bars_mte):
             if base_val > 0 and mte_val > 0:
