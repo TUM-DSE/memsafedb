@@ -52,6 +52,11 @@
       tqdm
       natsort
       psutil
+      pandas
+      beautifulsoup4
+      torch
+      transformers
+      accelerate
     ];
     mysql_jdbc_jar = "${pkgs.mysql_jdbc}/share/java/mysql-connector-j.jar";
     sharedPkgs = with pkgs; [
@@ -87,6 +92,7 @@
       tcl
       icu
       texliveFull
+      jq
     ];
   in
   {
@@ -101,6 +107,11 @@
         py-tpcc = pkgs.callPackage ./nix/py-tpcc {};
       };
       devShells = {
+        "jack" = pkgs.mkShell {
+          name="memsafedb-devshell-jack";
+          buildInputs = with pkgs; [
+          ] ++ sharedPkgs;
+        };
         "eliza" = pkgs.mkShell {
           name="memsafedb-devshell-eliza";
           buildInputs = with pkgs; [

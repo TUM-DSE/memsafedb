@@ -2,14 +2,9 @@
 """DBMS benchmark plotting script."""
 from common import *
 
-BASELINE_COLOR = 'tab:blue'
-MTE_COLOR = 'tab:orange'
-BASELINE_HATCH = ''
-MTE_HATCH = '///'
-
 def add_two_item_legend(fig, left_label: str, right_label: str, loc: str = 'upper left', bbox_to_anchor: tuple = (0.03, 0.97)):
     handles = [
-        mpl.patches.Patch(facecolor=BASELINE_COLOR, edgecolor='black', label=left_label),
+        mpl.patches.Patch(facecolor=BASELINE_MTE_COLOR, edgecolor='black', hatch=BASELINE_MTE_HATCH, label=left_label),
         mpl.patches.Patch(facecolor=MTE_COLOR, edgecolor='black', hatch=MTE_HATCH, label=right_label),
     ]
     fig.legend(
@@ -33,119 +28,6 @@ def load_dbms_data() -> pd.DataFrame:
     return pd.read_csv(csv_path)
 
 
-def plot_grouped_bars(
-    df: pd.DataFrame,
-    database: str,
-    benchmark: str,
-    metric: str,
-    ylabel: str,
-    filename: str,
-    figsize: tuple = None,
-    higher_is_better: bool = False,
-):
-    """Generic grouped bar plot for baseline vs MTE."""
-    data = df[
-        (df['database'] == database) &
-        (df['benchmark'] == benchmark) &
-        (df['metric_name'] == metric)
-    ]
-
-    if data.empty:
-        print(f"No data for {database}/{benchmark}/{metric}")
-        return
-
-    if figsize is None:
-        figsize = (figwidth_half, fig_height * 1.3)
-
-    fig, ax = plt.subplots(figsize=figsize)
-
-    # Pivot to get release vs release-mte side by side
-    pivot = data.pivot_table(
-        index='workload',
-        columns='variant',
-        values='metric_value',
-        aggfunc='mean'
-    )
-
-    # Sort workloads naturally (q1, q2, ... q10, q11, etc.)
-    pivot = pivot.reindex(natsorted(pivot.index, alg=ns.NUMAFTER))
-
-    x = spaced_positions(len(pivot))
-    width = 0.5
-
-    # Get column names dynamically
-    variants = pivot.columns.tolist()
-
-    # Determine baseline and MTE variants based on available options
-    # Priority: release/release-mte > release-dynamic/release-mte > first/last
-    if 'release' in variants and 'release-mte' in variants:
-        baseline_var = 'release'
-        mte_var = 'release-mte'
-    elif 'release-dynamic' in variants and 'release-mte' in variants:
-        baseline_var = 'release-dynamic'
-        mte_var = 'release-mte'
-    else:
-        # Fallback to first and last (but this may not be correct)
-        baseline_var = variants[0]
-        mte_var = variants[-1]
-
-    bars1 = ax.bar(
-        x - width / 2,
-        pivot[baseline_var],
-        width,
-        label='Baseline',
-        color=BASELINE_COLOR,
-        edgecolor='black',
-        hatch=BASELINE_HATCH,
-    )
-    bars2 = ax.bar(
-        x + width / 2,
-        pivot[mte_var],
-        width,
-        label='MTE',
-        color=MTE_COLOR,
-        edgecolor='black',
-        hatch=MTE_HATCH,
-    )
-
-    ax.set_ylabel(ylabel, fontsize=FONTSIZE, labelpad=1)
-    ax.set_xticks(x)
-    ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
-
-    # Rotate labels if many workloads
-    if len(pivot) > 10:
-        ax.tick_params(axis='x', labelrotation=45)
-    elif len(pivot) > 6:
-        ax.tick_params(axis='x', labelrotation=30)
-
-    add_two_item_legend(fig, 'Baseline', 'MTE')
-
-    # Add better/worse indicator
-    indicator = higher_better_str if higher_is_better else lower_better_str
-    ax.text(
-        0.5,
-        0.94,
-        indicator,
-        color='blue',
-        ha='center',
-        va='top',
-        transform=ax.transAxes,
-        fontsize=FONTSIZE - 1,
-    )
-
-    # Format y-axis for large numbers
-    ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers))
-
-    plt.tight_layout()
-    plt.savefig(
-        os.path.join(result_dir, filename),
-        format='pdf',
-        bbox_inches='tight',
-    )
-    plt.close()
-    print(f"Generated {filename}")
-
-
 def plot_duckdb_tpch(df: pd.DataFrame):
     """Plot DuckDB TPC-H query times (warm cache)."""
     # Filter to only warm cache variants (release and release-mte)
@@ -160,6 +42,10 @@ def plot_duckdb_tpch(df: pd.DataFrame):
         print("No data for duckdb/tpch/query_time (warm cache)")
         return
 
+    # Convert latency to throughput (QPS)
+    data = data.copy()
+    data['metric_value'] = 1.0 / data['metric_value']
+
     figsize = (figwidth_full, fig_height * 1.5)
     fig, ax = plt.subplots(figsize=figsize)
 
@@ -170,9 +56,17 @@ def plot_duckdb_tpch(df: pd.DataFrame):
         values='metric_value',
         aggfunc='mean'
     )
+    pivot_std = data.pivot_table(
+        index='workload',
+        columns='variant',
+        values='metric_value',
+        aggfunc='std'
+    ).fillna(0)
 
     # Sort workloads naturally (q1, q2, ... q10, q11, etc.)
-    pivot = pivot.reindex(natsorted(pivot.index, alg=ns.NUMAFTER))
+    sorted_idx = natsorted(pivot.index, alg=ns.NUMAFTER)
+    pivot = pivot.reindex(sorted_idx)
+    pivot_std = pivot_std.reindex(sorted_idx)
 
     x = np.arange(len(pivot))
     width = 0.35
@@ -180,39 +74,33 @@ def plot_duckdb_tpch(df: pd.DataFrame):
     # Get column names dynamically
     variants = pivot.columns.tolist()
 
-    # Determine baseline and MTE variants based on available options
-    # Priority: release/release-mte > release-dynamic/release-mte > first/last
-    if 'release' in variants and 'release-mte' in variants:
-        baseline_var = 'release'
-        mte_var = 'release-mte'
-    elif 'release-dynamic' in variants and 'release-mte' in variants:
-        baseline_var = 'release-dynamic'
-        mte_var = 'release-mte'
-    else:
-        # Fallback to first and last (but this may not be correct)
-        baseline_var = variants[0]
-        mte_var = variants[-1]
+    baseline_var = 'release'
+    mte_var = 'release-mte'
 
     bars1 = ax.bar(
         x - width / 2,
         pivot[baseline_var],
         width,
+        yerr=pivot_std[baseline_var] if baseline_var in pivot_std else None,
+        capsize=3,
         label='Baseline',
-        color=baseline_color,
+        color=BASELINE_MTE_COLOR,
         edgecolor='black',
-        hatch=baseline_hatch,
+        hatch=BASELINE_MTE_HATCH,
     )
     bars2 = ax.bar(
         x + width / 2,
         pivot[mte_var],
         width,
+        yerr=pivot_std[mte_var] if mte_var in pivot_std else None,
+        capsize=3,
         label='MTE',
-        color=sys_color,
+        color=MTE_COLOR,
         edgecolor='black',
-        hatch=sys_hatch,
+        hatch=MTE_HATCH,
     )
 
-    ax.set_ylabel('Query Time (s)', fontsize=FONTSIZE)
+    ax.set_ylabel('Throughput (QPS)', fontsize=FONTSIZE)
     ax.set_xticks(x)
     ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
     ax.tick_params(axis='x', labelrotation=45)
@@ -221,7 +109,7 @@ def plot_duckdb_tpch(df: pd.DataFrame):
 
     # Add better/worse indicator
     ax.annotate(
-        lower_better_str,
+        higher_better_str,
         color='blue',
         xy=(0.02, 0.92),
         xycoords='axes fraction',
@@ -255,6 +143,10 @@ def plot_duckdb_tpch_cold(df: pd.DataFrame):
         print("No data for duckdb/tpch/query_time (cold cache)")
         return
 
+    # Convert latency to throughput (QPS)
+    data = data.copy()
+    data['metric_value'] = 1.0 / data['metric_value']
+
     figsize = (figwidth_full, fig_height * 1.5)
     fig, ax = plt.subplots(figsize=figsize)
 
@@ -265,9 +157,17 @@ def plot_duckdb_tpch_cold(df: pd.DataFrame):
         values='metric_value',
         aggfunc='mean'
     )
+    pivot_std = data.pivot_table(
+        index='workload',
+        columns='variant',
+        values='metric_value',
+        aggfunc='std'
+    ).fillna(0)
 
     # Sort workloads naturally (q1, q2, ... q10, q11, etc.)
-    pivot = pivot.reindex(natsorted(pivot.index, alg=ns.NUMAFTER))
+    sorted_idx = natsorted(pivot.index, alg=ns.NUMAFTER)
+    pivot = pivot.reindex(sorted_idx)
+    pivot_std = pivot_std.reindex(sorted_idx)
 
     x = np.arange(len(pivot))
     width = 0.35
@@ -281,22 +181,26 @@ def plot_duckdb_tpch_cold(df: pd.DataFrame):
         x - width / 2,
         pivot[baseline_var],
         width,
+        yerr=pivot_std[baseline_var] if baseline_var in pivot_std else None,
+        capsize=3,
         label='Baseline (Cold)',
-        color=baseline_color,
+        color=BASELINE_MTE_COLOR,
         edgecolor='black',
-        hatch=baseline_hatch,
+        hatch=BASELINE_MTE_HATCH,
     )
     bars2 = ax.bar(
         x + width / 2,
         pivot[mte_var],
         width,
+        yerr=pivot_std[mte_var] if mte_var in pivot_std else None,
+        capsize=3,
         label='MTE (Cold)',
-        color=sys_color,
+        color=MTE_COLOR,
         edgecolor='black',
-        hatch=sys_hatch,
+        hatch=MTE_HATCH,
     )
 
-    ax.set_ylabel('Query Time (s)', fontsize=FONTSIZE)
+    ax.set_ylabel('Throughput (QPS)', fontsize=FONTSIZE)
     ax.set_xticks(x)
     ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
     ax.tick_params(axis='x', labelrotation=45)
@@ -305,7 +209,7 @@ def plot_duckdb_tpch_cold(df: pd.DataFrame):
 
     # Add better/worse indicator
     ax.annotate(
-        lower_better_str,
+        higher_better_str,
         color='blue',
         xy=(0.02, 0.92),
         xycoords='axes fraction',
@@ -326,7 +230,7 @@ def plot_duckdb_tpch_cold(df: pd.DataFrame):
 
 
 def plot_leveldb_ycsb(df: pd.DataFrame):
-    """Plot LevelDB YCSB throughput: Dynamic vs MTE and Static vs CHERI as separate PDFs."""
+    """Plot LevelDB YCSB throughput."""
     data = df[
         (df['database'] == 'leveldb') &
         (df['benchmark'] == 'ycsb') &
@@ -334,16 +238,112 @@ def plot_leveldb_ycsb(df: pd.DataFrame):
     ]
 
     if data.empty:
-        print("No data for leveldb/ycsb/throughput")
+        print("No data for leveldb/ycsb")
         return
 
-    # Pivot to get all variants
+    # Pivot
     pivot = data.pivot_table(
         index='workload',
         columns='variant',
         values='metric_value',
         aggfunc='mean'
     )
+    pivot_std = data.pivot_table(
+        index='workload',
+        columns='variant',
+        values='metric_value',
+        aggfunc='std'
+    ).fillna(0)
+
+    # Sort workloads naturally
+    sorted_idx = natsorted(pivot.index, alg=ns.NUMAFTER)
+    pivot = pivot.reindex(sorted_idx)
+    pivot_std = pivot_std.reindex(sorted_idx)
+
+    # Rename workloads (a_t1 -> A, etc.)
+    new_index = [x.replace('_t1', '').upper() for x in pivot.index]
+    pivot.index = new_index
+    pivot_std.index = new_index
+
+    # Define variant order preference
+    preferred_order = ['release-dynamic', 'release-mte', 'release-asan', 'release-static', 'release-cheri']
+    # Filter/Sort columns present in pivot
+    variants = [v for v in preferred_order if v in pivot.columns]
+    # Add any others not in preference
+    for c in pivot.columns:
+        if c not in variants:
+            variants.append(c)
+
+    pivot = pivot[variants]
+
+    # Ensure pivot_std has the same columns, filling missing ones with 0
+    for col in variants:
+        if col not in pivot_std.columns:
+            pivot_std[col] = 0.0
+            
+    pivot_std = pivot_std[variants]
+
+    figsize = (figwidth_full, fig_height * 1.5)
+    fig, ax = plt.subplots(figsize=figsize)
+
+    x = np.arange(len(pivot))
+    total_width = 0.8
+    num_vars = len(variants)
+    bar_width = total_width / num_vars
+
+    for i, var in enumerate(variants):
+        offset = (i - num_vars/2 + 0.5) * bar_width
+
+        style = style_map.get(var)
+        if style:
+            color = style['color']
+            hatch = style['hatch']
+            label = style['label']
+        else:
+            # Fallback
+            color = palette[i % len(palette)]
+            hatch = hatch_def[i % len(hatch_def)]
+            label = var
+
+        ax.bar(
+            x + offset,
+            pivot[var],
+            bar_width,
+            label=label,
+            color=color,
+            edgecolor='black',
+            hatch=hatch,
+            yerr=pivot_std[var] if var in pivot_std else None,
+            capsize=3,
+        )
+
+    ax.set_ylabel('Throughput (ops/sec)', fontsize=FONTSIZE)
+    ax.set_xticks(x)
+    ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
+    ax.tick_params(axis='x', labelrotation=45)
+
+    ax.legend(fontsize=FONTSIZE - 1, loc='upper right', ncol=2)
+
+    # Indicator
+    ax.annotate(
+        higher_better_str,
+        color='blue',
+        xy=(0.02, 0.92),
+        xycoords='axes fraction',
+        fontsize=FONTSIZE - 1,
+    )
+
+    # Format y-axis for large numbers
+    ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers))
+
+    plt.tight_layout()
+    plt.savefig(
+        os.path.join(result_dir, 'dbms_leveldb_ycsb.pdf'),
+        format='pdf',
+        bbox_inches='tight',
+    )
+    plt.close()
+    print("Generated dbms_leveldb_ycsb.pdf")
 
     # Sort workloads naturally
     pivot = pivot.reindex(natsorted(pivot.index, alg=ns.NUMAFTER))
@@ -368,10 +368,12 @@ def plot_leveldb_ycsb(df: pd.DataFrame):
             x - width / 2,
             pivot[dynamic_var],
             width,
-            label='Dynamic',
+            label='Baseline (MTE)',
             color=baseline_color,
             edgecolor='black',
             hatch='',
+            yerr=pivot_std[dynamic_var],
+            capsize=3,
         )
         ax.bar(
             x + width / 2,
@@ -381,6 +383,8 @@ def plot_leveldb_ycsb(df: pd.DataFrame):
             color=sys_color,
             edgecolor='black',
             hatch='///',
+            yerr=pivot_std[mte_var],
+            capsize=3,
         )
         ax.set_ylabel('Throughput (ops/sec)', fontsize=FONTSIZE)
         ax.set_xticks(x)
@@ -413,10 +417,12 @@ def plot_leveldb_ycsb(df: pd.DataFrame):
             x - width / 2,
             pivot[static_var],
             width,
-            label='Static',
+            label='Baseline (CHERI)',
             color='#90EE90',
             edgecolor='black',
             hatch='\\\\\\',
+            yerr=pivot_std[static_var],
+            capsize=3,
         )
         ax.bar(
             x + width / 2,
@@ -426,6 +432,8 @@ def plot_leveldb_ycsb(df: pd.DataFrame):
             color='#FFB6C1',
             edgecolor='black',
             hatch='|||',
+            yerr=pivot_std[cheri_var],
+            capsize=3,
         )
         ax.set_ylabel('Throughput (ops/sec)', fontsize=FONTSIZE)
         ax.set_xticks(x)
@@ -627,14 +635,33 @@ def plot_sqlite_tpcc(df: pd.DataFrame):
 
     # Group by variant
     grouped = data.groupby('variant')['metric_value'].agg(['mean', 'std']).reset_index()
-    grouped = grouped.sort_values('variant')
-
+    
+    # Sort according to preferred order
+    preferred_order = ['release-dynamic', 'release-mte', 'release-asan', 'release-static', 'release-cheri']
+    # Create a mapping for sort order
+    order_map = {v: i for i, v in enumerate(preferred_order)}
+    # Assign max rank to unknown variants so they appear at end
+    grouped['rank'] = grouped['variant'].map(order_map).fillna(len(preferred_order))
+    grouped = grouped.sort_values('rank')
+    
     variants = grouped['variant'].tolist()
     x = np.arange(len(variants))
 
-    colors = [baseline_color if 'mte' not in v else sys_color for v in variants]
-    hatches = [baseline_hatch if 'mte' not in v else sys_hatch for v in variants]
-    labels = ['Baseline' if 'mte' not in v else 'MTE' for v in variants]
+    colors = []
+    hatches = []
+    labels = []
+
+    for var in variants:
+        style = style_map.get(var)
+        if style:
+            colors.append(style['color'])
+            hatches.append(style['hatch'])
+            labels.append(style['label'])
+        else:
+            # Fallback
+            colors.append(palette[0])
+            hatches.append(hatch_def[0])
+            labels.append(var)
 
     bars = ax.bar(
         x,
@@ -650,6 +677,7 @@ def plot_sqlite_tpcc(df: pd.DataFrame):
     ax.set_ylabel('TPS', fontsize=FONTSIZE)
     ax.set_xticks(x)
     ax.set_xticklabels(labels, fontsize=FONTSIZE - 1)
+
     ax.annotate(
         higher_better_str,
         color='blue',
@@ -856,130 +884,230 @@ def plot_mysql_sysbench(df: pd.DataFrame):
     print("Generated dbms_mysql_sysbench.pdf")
 
 
-def plot_ladybug_lsqb(df: pd.DataFrame):
-    """Plot Ladybug LSQB query times: Dynamic vs MTE and Static vs CHERI as separate PDFs."""
+def plot_ladybug_ldbc(df: pd.DataFrame):
+    """Plot Ladybug LDBC query times."""
     data = df[
         (df['database'] == 'ladybug') &
-        (df['benchmark'] == 'lsqb') &
+        (df['benchmark'] == 'ldbc') &
         (df['metric_name'] == 'query_time')
     ]
 
     if data.empty:
-        print("No data for ladybug/lsqb/query_time")
+        print("No data for ladybug/ldbc")
         return
 
-    # Pivot to get all variants
+    # Pivot
     pivot = data.pivot_table(
         index='workload',
         columns='variant',
         values='metric_value',
         aggfunc='mean'
     )
+    pivot_std = data.pivot_table(
+        index='workload',
+        columns='variant',
+        values='metric_value',
+        aggfunc='std'
+    ).fillna(0)
 
     # Sort workloads naturally
-    pivot = pivot.reindex(natsorted(pivot.index, alg=ns.NUMAFTER))
+    sorted_idx = natsorted(pivot.index, alg=ns.NUMAFTER)
+    pivot = pivot.reindex(sorted_idx)
+    pivot_std = pivot_std.reindex(sorted_idx)
 
-    # Check which naming scheme is used
-    variant_order = ['release-dynamic', 'release-mte', 'release-static', 'release-cheri']
-    variant_order_old = ['dynamic', 'mte', 'static', 'cheri']
+    # Define variant order preference
+    preferred_order = ['release-dynamic', 'release-mte', 'release-asan', 'release-static', 'release-cheri']
+    # Filter/Sort columns present in pivot
+    variants = [v for v in preferred_order if v in pivot.columns]
+    # Add any others not in preference
+    for c in pivot.columns:
+        if c not in variants:
+            variants.append(c)
+    
+    pivot = pivot[variants]
 
-    if any(v in pivot.columns for v in variant_order):
-        dynamic_var, mte_var, static_var, cheri_var = variant_order
-    else:
-        dynamic_var, mte_var, static_var, cheri_var = variant_order_old
+    # Ensure pivot_std has the same columns, filling missing ones with 0
+    for col in variants:
+        if col not in pivot_std.columns:
+            pivot_std[col] = 0.0
+
+    pivot_std = pivot_std[variants]
+
+    figsize = (figwidth_full, fig_height * 1.5)
+    fig, ax = plt.subplots(figsize=figsize)
 
     x = np.arange(len(pivot))
-    width = 0.35
+    total_width = 0.8
+    num_vars = len(variants)
+    bar_width = total_width / num_vars
 
-    # Plot 1: Dynamic vs MTE
-    if dynamic_var in pivot.columns and mte_var in pivot.columns:
-        fig, ax = plt.subplots(figsize=(figwidth_half, fig_height * 1.3))
-
-        ax.bar(
-            x - width / 2,
-            pivot[dynamic_var],
-            width,
-            label='Dynamic',
-            color=baseline_color,
-            edgecolor='black',
-            hatch='',
-        )
-        ax.bar(
-            x + width / 2,
-            pivot[mte_var],
-            width,
-            label='MTE',
-            color=sys_color,
-            edgecolor='black',
-            hatch='///',
-        )
-        ax.set_ylabel('Query Time (s)', fontsize=FONTSIZE)
-        ax.set_xticks(x)
-        ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
-        ax.tick_params(axis='x', labelrotation=30)
-        ax.legend(fontsize=FONTSIZE - 1, loc='upper right')
-        ax.annotate(
-            lower_better_str,
-            color='blue',
-            xy=(0.02, 0.92),
-            xycoords='axes fraction',
-            fontsize=FONTSIZE - 1,
-        )
-        ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers))
-
-        plt.tight_layout()
-        plt.savefig(
-            os.path.join(result_dir, 'dbms_ladybug_lsqb_dynamic_mte.pdf'),
-            format='pdf',
-            bbox_inches='tight',
-        )
-        plt.close()
-        print("Generated dbms_ladybug_lsqb_dynamic_mte.pdf")
-
-    # Plot 2: Static vs CHERI
-    if static_var in pivot.columns and cheri_var in pivot.columns:
-        fig, ax = plt.subplots(figsize=(figwidth_half, fig_height * 1.3))
+    for i, var in enumerate(variants):
+        offset = (i - num_vars/2 + 0.5) * bar_width
+        
+        style = style_map.get(var)
+        if style:
+            color = style['color']
+            hatch = style['hatch']
+            label = style['label']
+        else:
+            # Fallback
+            color = palette[i % len(palette)]
+            hatch = hatch_def[i % len(hatch_def)]
+            label = var
 
         ax.bar(
-            x - width / 2,
-            pivot[static_var],
-            width,
-            label='Static',
-            color='#90EE90',
+            x + offset,
+            pivot[var],
+            bar_width,
+            label=label,
+            color=color,
             edgecolor='black',
-            hatch='\\\\\\',
+            hatch=hatch,
+            yerr=pivot_std[var] if var in pivot_std else None,
+            capsize=3,
         )
-        ax.bar(
-            x + width / 2,
-            pivot[cheri_var],
-            width,
-            label='CHERI',
-            color='#FFB6C1',
-            edgecolor='black',
-            hatch='|||',
-        )
-        ax.set_ylabel('Query Time (s)', fontsize=FONTSIZE)
-        ax.set_xticks(x)
-        ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
-        ax.tick_params(axis='x', labelrotation=30)
-        ax.legend(fontsize=FONTSIZE - 1, loc='upper right')
-        ax.annotate(
-            lower_better_str,
-            color='blue',
-            xy=(0.02, 0.92),
-            xycoords='axes fraction',
-            fontsize=FONTSIZE - 1,
-        )
-        ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers))
 
-        plt.tight_layout()
-        plt.savefig(
-            os.path.join(result_dir, 'dbms_ladybug_lsqb_static_cheri.pdf'),
-            format='pdf',
-            bbox_inches='tight',
+    ax.set_ylabel('Query Time (ms)', fontsize=FONTSIZE)
+    ax.set_xticks(x)
+    ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
+    ax.tick_params(axis='x', labelrotation=45)
+
+    ax.legend(fontsize=FONTSIZE - 1, loc='upper right', ncol=3)
+
+    # Indicator
+    ax.annotate(
+        lower_better_str,
+        color='blue',
+        xy=(0.02, 0.92),
+        xycoords='axes fraction',
+        fontsize=FONTSIZE - 1,
+    )
+
+    # Format y-axis for large numbers
+    ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers))
+
+    plt.tight_layout()
+    plt.savefig(
+        os.path.join(result_dir, 'dbms_ladybug_ldbc.pdf'),
+        format='pdf',
+        bbox_inches='tight',
+    )
+    plt.close()
+    print("Generated dbms_ladybug_ldbc.pdf")
+
+
+
+def plot_leveldb_motiv(df: pd.DataFrame):
+    """Plot LevelDB motivation benchmarks (throughput)."""
+    data = df[
+        (df['database'] == 'leveldb_motiv') &
+        (df['benchmark'] == 'db_bench') &
+        (df['metric_name'] == 'throughput')
+    ]
+
+    if data.empty:
+        print("No data for leveldb_motiv")
+        return
+
+    # Pivot
+    pivot = data.pivot_table(
+        index='workload',
+        columns='variant',
+        values='metric_value',
+        aggfunc='mean'
+    )
+    pivot_std = data.pivot_table(
+        index='workload',
+        columns='variant',
+        values='metric_value',
+        aggfunc='std'
+    ).fillna(0)
+
+    # Sort workloads
+    sorted_idx = natsorted(pivot.index, alg=ns.NUMAFTER)
+    pivot = pivot.reindex(sorted_idx)
+    pivot_std = pivot_std.reindex(sorted_idx)
+
+    # Define variant order preference
+    preferred_order = ['release-dynamic', 'release-mte', 'release-asan', 'release-static', 'release-cheri']
+    # Filter/Sort columns present in pivot
+    variants = [v for v in preferred_order if v in pivot.columns]
+    # Add any others not in preference
+    for c in pivot.columns:
+        if c not in variants:
+            variants.append(c)
+
+    pivot = pivot[variants]
+
+    # Ensure pivot_std has the same columns, filling missing ones with 0
+    for col in variants:
+        if col not in pivot_std.columns:
+            pivot_std[col] = 0.0
+
+    pivot_std = pivot_std[variants]
+
+    figsize = (figwidth_full, fig_height * 1.5)
+    fig, ax = plt.subplots(figsize=figsize)
+
+    x = np.arange(len(pivot))
+    total_width = 0.8
+    num_vars = len(variants)
+    bar_width = total_width / num_vars
+
+    for i, var in enumerate(variants):
+        offset = (i - num_vars/2 + 0.5) * bar_width
+
+        style = style_map.get(var)
+        if style:
+            color = style['color']
+            hatch = style['hatch']
+            label = style['label']
+        else:
+            # Fallback
+            color = palette[i % len(palette)]
+            hatch = hatch_def[i % len(hatch_def)]
+            label = var
+
+        ax.bar(
+            x + offset,
+            pivot[var],
+            bar_width,
+            label=label,
+            color=color,
+            edgecolor='black',
+            hatch=hatch,
+            yerr=pivot_std[var] if var in pivot_std else None,
+            capsize=3,
         )
-        plt.close()
-        print("Generated dbms_ladybug_lsqb_static_cheri.pdf")
+
+    ax.set_ylabel('Throughput (MB/s)', fontsize=FONTSIZE)
+    ax.set_xticks(x)
+    ax.set_xticklabels(pivot.index, fontsize=FONTSIZE - 1)
+    ax.tick_params(axis='x', labelrotation=45)
+
+    ax.legend(fontsize=FONTSIZE - 1, loc='upper right', ncol=2)
+
+    # Indicator
+    ax.annotate(
+        higher_better_str,
+        color='blue',
+        xy=(0.02, 0.92),
+        xycoords='axes fraction',
+        fontsize=FONTSIZE - 1,
+    )
+
+    ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers))
+
+    plt.tight_layout()
+    plt.savefig(
+        os.path.join(result_dir, 'dbms_leveldb_motiv.pdf'),
+        format='pdf',
+        bbox_inches='tight',
+    )
+    plt.close()
+    print("Generated dbms_leveldb_motiv.pdf")
+
+
 
 
 def plot_overhead_summary(df: pd.DataFrame):
@@ -1103,7 +1231,8 @@ def main():
     plot_redis_ycsb(df)
     plot_sqlite_tpcc(df)
     plot_mysql_sysbench(df)
-    plot_ladybug_lsqb(df)
+    plot_ladybug_ldbc(df)
+    plot_leveldb_motiv(df)
 
     # Generate summary plot
     plot_overhead_summary(df)

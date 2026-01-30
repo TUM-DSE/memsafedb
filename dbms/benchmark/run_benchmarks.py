@@ -19,6 +19,7 @@ from parsers import (
 DBMS_DIR = Path(__file__).parent.parent
 PROJECT_ROOT = DBMS_DIR.parent
 RESULTS_FILE = PROJECT_ROOT / "results" / "dbms_results.csv"
+LOG_DIR = PROJECT_ROOT / "results" / "dbms"
 
 DATABASES = ['duckdb', 'leveldb', 'leveldb_motiv', 'redis', 'sqlite', 'mysql', 'ladybug']
 
@@ -50,7 +51,7 @@ CSV_FIELDNAMES = [
 ]
 
 
-def run_benchmark(db: str, repetition: int) -> list[dict]:
+def run_benchmark(db: str, repetition: int, log_dir: Path | None = None) -> list[dict]:
     """Run benchmark for a database and return parsed results."""
     target = DB_TO_TARGET.get(db)
     if not target:
@@ -77,6 +78,11 @@ def run_benchmark(db: str, repetition: int) -> list[dict]:
     # Preserve stream ordering for parsers that rely on benchmark markers.
     combined_output = result.stdout or ""
 
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_file = LOG_DIR / f"{db}_rep{repetition}.txt"
+    with open(log_file, "w") as f:
+        f.write(combined_output)
+
     parser = DB_TO_PARSER.get(db)
     if not parser:
         print(f"No parser for database: {db}", file=sys.stderr)
@@ -95,7 +101,7 @@ def main():
     parser.add_argument(
         '--repetitions',
         type=int,
-        default=1,
+        default=3,
         help='Number of repetitions for each benchmark'
     )
     parser.add_argument(

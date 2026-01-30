@@ -501,39 +501,55 @@ def parse_leveldb_output(output: str, repetition: int) -> Iterator[dict]:
 def parse_sqlite_output(output: str, repetition: int) -> Iterator[dict]:
     """Parse SQLite TPC-C (py-tpcc) output.
 
-    py-tpcc outputs a summary table with:
+    Output contains multiple runs separated by:
+    === Executing [variant] ===
+    ...
     Execution Results after 60 seconds
     ...
-      TOTAL           39579                 58.409
+      TOTAL           42132                 58.383
     """
+    variant_pattern = re.compile(r'===\s+Executing\s+([a-zA-Z0-9_-]+)\s+===', re.IGNORECASE)
     duration_pattern = re.compile(r'Execution Results after\s+(\d+)\s+seconds', re.IGNORECASE)
     total_pattern = re.compile(r'^\s*TOTAL\s+(\d+)\b', re.IGNORECASE)
-    variants = ['release', 'release-mte']
 
-    results = []
+    current_variant = None
     current_duration = None
 
     for line in output.split('\n'):
         line = line.strip()
 
+        # Check for variant header
+        variant_match = variant_pattern.search(line)
+        if variant_match:
+            variant_raw = variant_match.group(1).lower()
+            if variant_raw == 'dynamic':
+                current_variant = 'release-dynamic'
+            elif variant_raw == 'mte':
+                current_variant = 'release-mte'
+            elif variant_raw == 'static':
+                current_variant = 'release-static'
+            elif variant_raw == 'cheri':
+                current_variant = 'release-cheri'
+            else:
+                current_variant = f"release-{variant_raw}"
+            current_duration = None
+            continue
+
+        # Check for duration
         duration_match = duration_pattern.search(line)
         if duration_match:
             current_duration = int(duration_match.group(1))
             continue
 
+        # Check for TOTAL line
         total_match = total_pattern.match(line)
-        if total_match and current_duration:
+        if total_match and current_variant and current_duration:
             total_txn = int(total_match.group(1))
-            results.append((current_duration, total_txn))
-            current_duration = None
-
-    for var_idx, variant in enumerate(variants):
-        if var_idx < len(results):
-            duration, total_txn = results[var_idx]
-            tps_value = total_txn / duration if duration > 0 else 0.0
+            tps_value = total_txn / current_duration if current_duration > 0 else 0.0
+            
             yield {
                 'database': 'sqlite',
-                'variant': variant,
+                'variant': current_variant,
                 'benchmark': 'tpcc',
                 'workload': 'tpcc',
                 'metric_name': 'tps',
@@ -541,6 +557,8 @@ def parse_sqlite_output(output: str, repetition: int) -> Iterator[dict]:
                 'unit': 'txn/sec',
                 'repetition': repetition,
             }
+            # Reset duration to avoid duplicate parsing if multiple tables exist (unlikely here)
+            current_duration = None
 
 
 def parse_mysql_output(output: str, repetition: int) -> Iterator[dict]:
@@ -682,43 +700,58 @@ def parse_mysql_output(output: str, repetition: int) -> Iterator[dict]:
 def parse_ladybug_output(output: str, repetition: int) -> Iterator[dict]:
     """Parse Ladybug LSQB benchmark output.
 
-    The benchmark_runner.py logs per-query lines like:
-    INFO:root:Running query 1
-    INFO:root:Execution time (s): 1.9726
+    The output format includes:
+    === Executing [variant] - threads: [N] ===
+    ...
+    [info] Running benchmark [workload] with [N] thread
+    ...
+    [info] Time Taken (Average of Last 3 runs) (ms): 123.456
     """
-    query_pattern = re.compile(r'Running query\s+(\d+)', re.IGNORECASE)
-    time_pattern = re.compile(r'Execution time \(s\):\s+([\d.]+)', re.IGNORECASE)
-    variants = ['release-dynamic', 'release-mte', 'release-static', 'release-cheri']
+    variant_pattern = re.compile(r'===\s+Executing\s+([a-zA-Z0-9_-]+)\s+-\s+threads:\s+\d+\s+===', re.IGNORECASE)
+    query_pattern = re.compile(r'Running benchmark\s+([a-zA-Z0-9_-]+)\s+with', re.IGNORECASE)
+    time_pattern = re.compile(r'Time Taken \(Average of Last 3 runs\) \(ms\):\s+([\d.]+)', re.IGNORECASE)
 
-    run_idx = 0
+    current_variant = None
     current_query = None
-    seen_queries = set()
 
     for line in output.split('\n'):
         line = line.strip()
 
-        query_match = query_pattern.search(line)
-        if query_match:
-            query_num = int(query_match.group(1))
-            if query_num == 1 and seen_queries:
-                run_idx += 1
-                seen_queries = set()
-            current_query = query_num
-            seen_queries.add(query_num)
+        # Check for variant header
+        variant_match = variant_pattern.search(line)
+        if variant_match:
+            variant_raw = variant_match.group(1).lower()
+            # Map simplified variant names to full names used in reporting
+            if variant_raw == 'dynamic':
+                current_variant = 'release-dynamic'
+            elif variant_raw == 'mte':
+                current_variant = 'release-mte'
+            elif variant_raw == 'static':
+                current_variant = 'release-static'
+            elif variant_raw == 'cheri':
+                current_variant = 'release-cheri'
+            else:
+                current_variant = f"release-{variant_raw}"
             continue
 
-        time_match = time_pattern.search(line)
-        if time_match and current_query is not None and run_idx < len(variants):
-            query_time = float(time_match.group(1))
-            variant = variants[run_idx]
+        # Check for query start
+        query_match = query_pattern.search(line)
+        if query_match:
+            current_query = query_match.group(1)
+            continue
 
+        # Check for timing
+        time_match = time_pattern.search(line)
+        if time_match and current_variant and current_query:
+            query_time_ms = float(time_match.group(1))
+            
             yield {
                 'database': 'ladybug',
-                'variant': variant,
-                'benchmark': 'lsqb',
-                'workload': f'q{current_query}',
+                'variant': current_variant,
+                'benchmark': 'ldbc',
+                'workload': current_query,
                 'metric_name': 'query_time',
-                'metric_value': query_time,
-                'unit': 'seconds',
+                'metric_value': query_time_ms,
+                'unit': 'ms',
                 'repetition': repetition,
             }

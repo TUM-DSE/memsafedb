@@ -79,17 +79,24 @@ marker_def = [
     "+",
 ]
 
-baseline_hatch = hatch_def[0]
-sys_hatch = hatch_def[1]
-competitor1_hatch = hatch_def[2]
-competitor2_hatch = hatch_def[3]
-competitor3_hatch = hatch_def[4]
+BASELINE_MTE_COLOR = 'tab:blue'
+MTE_COLOR = 'tab:orange'
+BASELINE_CHERI_COLOR = 'tab:green'
+CHERI_COLOR = 'tab:red'
+ASAN_COLOR = 'tab:purple'
+BASELINE_MTE_HATCH = ''
+MTE_HATCH = '///'
+BASELINE_CHERI_HATCH = '\\\\'
+CHERI_HATCH = '||||'
+ASAN_HATCH = 'xx'
 
-baseline_color = palette[0]
-sys_color = palette[1]
-competitor1_color = palette[2]
-competitor2_color = palette[3]
-competitor3_color = palette[4]
+style_map = {
+        'release-static': {'color': BASELINE_CHERI_COLOR, 'hatch': BASELINE_CHERI_HATCH, 'label': 'Baseline (CHERI)'},
+        'release-dynamic': {'color': BASELINE_MTE_COLOR, 'hatch': BASELINE_MTE_HATCH, 'label': 'Baseline (MTE)'},
+        'release-mte': {'color': MTE_COLOR, 'hatch': MTE_HATCH, 'label': 'MTE'},
+        'release-asan': {'color': ASAN_COLOR, 'hatch': ASAN_HATCH, 'label': 'ASan'},
+        'release-cheri': {'color': CHERI_COLOR, 'hatch': CHERI_HATCH, 'label': 'CHERI'},
+}
 
 lower_better_str = "Lower is better ↓"
 higher_better_str = "Higher is better ↑"

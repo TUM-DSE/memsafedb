@@ -1,7 +1,8 @@
 dbms_basedir := source_dir()
 
 CHERI_HOST := "ace.dos.cit.tum.de"
-DATA_DIR := "/scratch/${USER}/memsafedb/data"
+user := `whoami`
+DATA_DIR := "/scratch/"+user+"/memsafedb/data"
 
 help:
   just -l dbms
@@ -24,16 +25,13 @@ prepare_local_data:
   rsync -av {{dbms_basedir}}/tpch-sf*.db {{CHERI_HOST}}:{{DATA_DIR}}
   rsync -rav {{dbms_basedir}}/workloads {{CHERI_HOST}}:{{DATA_DIR}}/
 
-build_duckdb arch="aarch64":
+build_duckdb:
   #!/usr/bin/env bash
   cd {{dbms_basedir}}/duckdb
-  if [[ "{{arch}}" = "cheri" ]] then
-    ARCH="{{arch}}" DUCKDB_PLATFORM=linux_arm64_musl EXTENSION_STATIC_BUILD=1 DISABLE_PARQUET=1 DISABLE_CPP_UNITTESTS=1 make -j release
-    # cmake ../.. -DCMAKE_TOOLCHAIN_FILE=../../../../utils/morello-toolchain.cmake -DCMAKE_BUILD_TYPE=Release -DDISABLE_UNITY=1 -DBUILD_EXTENSIONS="" -DBUILD_UNITTESTS=OFF -DBUILD_SHELL=ON -DENABLE_SANITIZER=OFF -DENABLE_UBSAN=OFF
-  else
-    ARCH="mte" make -j release
-    ARCH="{{arch}}" make -j release
-  fi
+  #  ARCH="cheri" DUCKDB_PLATFORM=linux_arm64_musl EXTENSION_STATIC_BUILD=1 DISABLE_PARQUET=1 DISABLE_CPP_UNITTESTS=1 make -j release
+  #  # cmake ../.. -DCMAKE_TOOLCHAIN_FILE=../../../../utils/morello-toolchain.cmake -DCMAKE_BUILD_TYPE=Release -DDISABLE_UNITY=1 -DBUILD_EXTENSIONS="" -DBUILD_UNITTESTS=OFF -DBUILD_SHELL=ON -DENABLE_SANITIZER=OFF -DENABLE_UBSAN=OFF
+  ARCH="mte" make -j release
+  ARCH="aarch64" make -j release
 
 setup_duckdb sf="100":
   #!/usr/bin/env bash
@@ -42,42 +40,51 @@ setup_duckdb sf="100":
   if [[ ! -e tpch-sf{{sf}}.db ]]; then
     wget https://blobs.duckdb.org/data/tpch-sf{{sf}}.db
   fi
+  mv tpch-sf{{sf}}.db {{DATA_DIR}}
 
 # Run TPC-H for duckdb
-run_duckdb sf="100":
+run_duckdb sf="100": setup_duckdb (sf)
   #!/usr/bin/env bash
   set -eu pipefail
 
   echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
   # Run all release queries (warm cache)
-  echo "=== Running release variant ===" >&2
+  echo "=== Running dynamic variant ===" >&2
   for q in `seq 1 22`
   do
-    {{dbms_basedir}}/duckdb/build/release/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{DATA_DIR}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+    {{dbms_basedir}}/duckdb/build/release-dynamic/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" > /dev/null 2>&1
+  done
+  for q in `seq 1 22`
+  do
+    {{dbms_basedir}}/duckdb/build/release-dynamic/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
 
   echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
   # Run all MTE queries (warm cache)
-  echo "=== Running release-mte variant ===" >&2
+  echo "=== Running mte variant ===" >&2
   for q in `seq 1 22`
   do
-    GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{DATA_DIR}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+    GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" > /dev/null 2>&1
+  done
+  for q in `seq 1 22`
+  do
+    GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
 
   # Run all release queries (cold cache - drop caches before each query)
-  echo "=== Running release-cold variant ===" >&2
+  echo "=== Running dynamic-cold variant ===" >&2
   for q in `seq 1 22`
   do
     echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
-    {{dbms_basedir}}/duckdb/build/release/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{DATA_DIR}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+    {{dbms_basedir}}/duckdb/build/release-dynamic/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
 
   # Run all MTE queries (cold cache - drop caches before each query)
-  echo "=== Running release-mte-cold variant ===" >&2
+  echo "=== Running mte-cold variant ===" >&2
   for q in `seq 1 22`
   do
     echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
-    GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{DATA_DIR}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+    GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
 
 clean_duckdb:
@@ -476,8 +483,8 @@ run_sqlite_eliza warehouses="1" duration="60" clients="1":
 run_sqlite warehouses="1" duration="60" clients="1":
   #!/usr/bin/env bash
   set -euo pipefail
-  just -f dbms::run_sqlite_eliza {{warehouses}} {{duration}} {{clients}}
-  ssh ace "nix develop {{dbms_basedir}}/..#ace-cheri --command just -f dbms::run_sqlite_ace {{warehouses}} {{duration}} {{clients}}"
+  just dbms::run_sqlite_eliza {{warehouses}} {{duration}} {{clients}}
+  ssh ace "nix develop {{dbms_basedir}}/..#ace-cheri --command just -f {{dbms_basedir}}/dbms.just run_sqlite_ace {{warehouses}} {{duration}} {{clients}}"
 
 setup_ladybug sf="10":
   #!/usr/bin/env python
@@ -554,7 +561,6 @@ run_ladybug_ace threads="4" sf="10":
     echo "=== Executing $suffix - threads: {{threads}} ==="
     PYTHONPATH="{{dbms_basedir}}/ladybug/tools/python_api/tools/python_api/build-${suffix}:${PYTHONPATH:-}" \
       DRY_RUN=true python3 {{dbms_basedir}}/ladybug/benchmark/benchmark_runner.py --dataset ldbc-sf{{sf}} --thread {{threads}}
-    rm lsqb.log
   done
 
 run_ladybug_eliza threads="4" sf="10":
@@ -581,8 +587,8 @@ run_ladybug threads="4" sf="10":
   #!/usr/bin/env bash
   just dbms::setup_ladybug "{{sf}}"
   just dbms::run_ladybug_eliza "{{threads}}" "{{sf}}"
-  ssh ace "nix develop {{dbms_basedir}}/..#ace-aarch64 --command just dbms::setup_ladybug {{sf}}"
-  ssh ace "nix develop {{dbms_basedir}}/..#ace-cheri --command just dbms::run_ladybug_ace {{threads}} {{sf}}"
+  ssh ace "nix develop {{dbms_basedir}}/..#ace-aarch64 --command  just -f {{dbms_basedir}}/dbms.just setup_ladybug {{sf}}"
+  ssh ace "nix develop {{dbms_basedir}}/..#ace-aarch64 --command just -f {{dbms_basedir}}/dbms.just run_ladybug_ace {{threads}} {{sf}}"
 
 build_mysql:
   #!/usr/bin/env bash
