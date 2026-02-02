@@ -38,6 +38,12 @@ figwidth_full = 7
 fig_height = 1.2
 FONTSIZE=7
 
+# Derived font sizes for consistency
+FONTSIZE_AXIS_LABEL = FONTSIZE
+FONTSIZE_TICK_LABEL = FONTSIZE
+FONTSIZE_LEGEND = FONTSIZE - 2
+FONTSIZE_ANNOTATION = FONTSIZE - 3
+
 def format_big_numbers(x, pos):
     if x >= 1e9:
         return f'{x / 1e9:.1f}B'
@@ -79,16 +85,18 @@ marker_def = [
     "+",
 ]
 
-BASELINE_MTE_COLOR = 'tab:blue'
-MTE_COLOR = 'tab:orange'
-BASELINE_CHERI_COLOR = 'tab:green'
-CHERI_COLOR = 'tab:red'
-ASAN_COLOR = 'tab:purple'
+BASELINE_MTE_COLOR = '#A6CEE3'  # Light Blue
+MTE_COLOR = '#1F78B4'           # Dark Blue
+ASAN_COLOR = '#984EA3'          # Purple
+BASELINE_CHERI_COLOR = '#FDBF6F' # Light Orange
+CHERI_COLOR = '#FF7F00'          # Dark Orange
+
 BASELINE_MTE_HATCH = ''
 MTE_HATCH = '///'
-BASELINE_CHERI_HATCH = '\\\\'
-CHERI_HATCH = '||||'
 ASAN_HATCH = 'xx'
+BASELINE_CHERI_HATCH = ''
+CHERI_HATCH = '\\\\\\\\'
+
 
 style_map = {
         'release-static': {'color': BASELINE_CHERI_COLOR, 'hatch': BASELINE_CHERI_HATCH, 'label': 'Baseline (CHERI)'},
