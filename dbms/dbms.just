@@ -43,7 +43,7 @@ setup_duckdb sf="100":
   mv tpch-sf{{sf}}.db {{DATA_DIR}}
 
 # Run TPC-H for duckdb
-run_duckdb sf="100": setup_duckdb (sf)
+run_duckdb sf="100": (setup_duckdb sf)
   #!/usr/bin/env bash
   set -eu pipefail
 
@@ -331,7 +331,7 @@ run_leveldb_bench threads="1":
   else
     cpus="0-$(($threads - 1))"
   fi
-  bench_params="--threads=$threads --histogram=1 --benchmarks=fillseq,fillsync,fillrandom,overwrite,readrandom,readseq,readreverse,compact,fill100K,crc32c"
+  bench_params="--threads=$threads --histogram=1 --benchmarks=fillrandom,readrandom"
 
   echo "=== Running threads $threads - MTE ==="
   taskset -c $cpus env GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/leveldb/build/release-mte/db_bench ${bench_params}
