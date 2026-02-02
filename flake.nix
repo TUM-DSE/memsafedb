@@ -107,6 +107,13 @@
         py-tpcc = pkgs.callPackage ./nix/py-tpcc {};
       };
       devShells = {
+        "plotter" = pkgs.mkShell {
+          name="memsafedb-devshell-plotter";
+          buildInputs = with pkgs; [
+            python3
+            python-pkgs
+          ];
+        };
         "jack" = pkgs.mkShell {
           name="memsafedb-devshell-jack";
           buildInputs = with pkgs; [
