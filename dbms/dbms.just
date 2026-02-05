@@ -43,7 +43,7 @@ setup_duckdb sf="100":
   mv tpch-sf{{sf}}.db {{DATA_DIR}}
 
 # Run TPC-H for duckdb
-run_duckdb sf="100": (setup_duckdb sf)
+run_duckdb sf="1000": #(setup_duckdb sf)
   #!/usr/bin/env bash
   set -eu pipefail
 
@@ -145,7 +145,7 @@ build_redis:
   build_target "dynamic" "aarch64" ""
 
 # Run YCSB for redis
-run_redis recordcount="10000" operationcount="10000":
+run_redis recordcount="100000" operationcount="100000":
   #!/usr/bin/env bash
   set -euo pipefail
 
