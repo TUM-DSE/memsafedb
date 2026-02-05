@@ -32,25 +32,37 @@ mpl.rcParams.update({
 })
 
 # 3.3 inch for single column, 7 inch for double column
+figwidth_column_third = 1
 figwidth_third = 2
 figwidth_half = 3.3
 figwidth_full = 7
-fig_height = 1.2
+fig_height = 1.5
 FONTSIZE=7
 
 # Derived font sizes for consistency
 FONTSIZE_AXIS_LABEL = FONTSIZE
 FONTSIZE_TICK_LABEL = FONTSIZE
-FONTSIZE_LEGEND = FONTSIZE - 2
-FONTSIZE_ANNOTATION = FONTSIZE - 3
+FONTSIZE_LEGEND = FONTSIZE - 1
+FONTSIZE_TITLE = FONTSIZE - 1
+FONTSIZE_ANNOTATION = FONTSIZE - 2
 
 def format_big_numbers(x, pos):
     if x >= 1e9:
-        return f'{x / 1e9:.1f}B'
+        return f'{x / 1e9:.0f}B'
     elif x >= 1e6:
-        return f'{x / 1e6:.1f}M'
+        return f'{x / 1e6:.0f}M'
     elif x >= 1e3:
-        return f'{x / 1e3:.1f}K'
+        return f'{x / 1e3:.0f}K'
+    else:
+        return f'{x:.0f}'
+
+def format_big_numbers_tweaked(x, pos):
+    if x >= 1e9:
+        return f'{x / 1e9:.0f}B'
+    elif x >= 1e6:
+        return f'{x / 1e6:.0f}M'
+    elif x >= 1e3:
+        return f'{x / 1e6:.1f}M'
     else:
         return f'{x:.0f}'
 
