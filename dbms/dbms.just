@@ -43,7 +43,7 @@ setup_duckdb sf="100":
   mv tpch-sf{{sf}}.db {{DATA_DIR}}
 
 # Run TPC-H for duckdb
-run_duckdb sf="100": setup_duckdb (sf)
+run_duckdb sf="1000": #(setup_duckdb sf)
   #!/usr/bin/env bash
   set -eu pipefail
 
@@ -145,7 +145,7 @@ build_redis:
   build_target "dynamic" "aarch64" ""
 
 # Run YCSB for redis
-run_redis recordcount="10000" operationcount="10000":
+run_redis recordcount="100000" operationcount="100000":
   #!/usr/bin/env bash
   set -euo pipefail
 
@@ -331,7 +331,7 @@ run_leveldb_bench threads="1":
   else
     cpus="0-$(($threads - 1))"
   fi
-  bench_params="--threads=$threads --histogram=1 --benchmarks=fillseq,fillsync,fillrandom,overwrite,readrandom,readseq,readreverse,compact,fill100K,crc32c"
+  bench_params="--threads=$threads --histogram=1 --benchmarks=fillrandom,readrandom"
 
   echo "=== Running threads $threads - MTE ==="
   taskset -c $cpus env GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/leveldb/build/release-mte/db_bench ${bench_params}

@@ -254,7 +254,7 @@ def parse_leveldb_bench_output(output: str, repetition: int) -> Iterator[dict]:
     """
     marker_pattern = re.compile(r'^===\s+Running threads\s+(\d+)\s+-\s+([a-zA-Z0-9_-]+)\s+===$', re.IGNORECASE)
     # db_bench output line: "fillseq      :       3.013 micros/op;  374.9 MB/s"
-    data_pattern = re.compile(r'^([a-zA-Z0-9_]+)\s*:\s+([0-9.]+)\s+micros/op;\s+([0-9.]+)\s+MB/s')
+    data_pattern = re.compile(r'^([a-zA-Z0-9_]+)\s*:\s+([0-9.]+)\s+micros/op;')
     
     stat_avg_pattern = re.compile(r'Average:\s+([0-9.]+)')
     stat_std_pattern = re.compile(r'StdDev:\s+([0-9.]+)')
@@ -304,19 +304,8 @@ def parse_leveldb_bench_output(output: str, repetition: int) -> Iterator[dict]:
         if data_match and current_variant:
             benchmark = data_match.group(1)
             micros_op = float(data_match.group(2))
-            throughput_mb = float(data_match.group(3))
+
             
-            # Yield Throughput
-            yield {
-                'database': 'leveldb_motiv',
-                'variant': current_variant,
-                'benchmark': 'db_bench',
-                'workload': f"{benchmark}_t{current_threads}",
-                'metric_name': 'throughput',
-                'metric_value': throughput_mb,
-                'unit': 'MB/s',
-                'repetition': repetition,
-            }
             
             # Yield Latency (micros/op) as avg_latency (default if no detailed stats)
             yield {

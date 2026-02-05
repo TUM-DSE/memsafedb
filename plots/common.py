@@ -14,22 +14,6 @@ import numpy as np
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 result_dir = os.path.join(dir_path, "../results")
-mpl.use("Agg")
-mpl.rcParams["text.latex.preamble"] = r"\usepackage{amsmath}"
-mpl.rcParams["pdf.fonttype"] = 42
-mpl.rcParams["ps.fonttype"] = 42
-mpl.rcParams["font.family"] = "libertine"
-
-
-mpl.rcParams.update({
-       "text.usetex": True,
-       "font.family": "serif",
-       "font.serif": ["Linux Libertine O"],
-       "text.latex.preamble": r"""
-   \usepackage[tt=false, type1=true]{libertine}
-   \usepackage[libertine]{newtxmath}
-   """
-})
 
 # 3.3 inch for single column, 7 inch for double column
 figwidth_column_third = 1
@@ -71,6 +55,18 @@ palette = sns.color_palette("pastel")
 sns.set_style("whitegrid")
 sns.set_style("ticks", {"xtick.major.size": FONTSIZE, "ytick.major.size": FONTSIZE})
 sns.set_context("paper", rc={"font.size": FONTSIZE, "axes.titlesize": FONTSIZE, "axes.labelsize": FONTSIZE})
+
+# must be done after sns styles, otherwise they force sans-serif
+mpl.use("Agg")
+mpl.rcParams.update({
+       "text.usetex": True,
+       "font.family": "serif",
+       "font.serif": ["Libertine"],
+       "text.latex.preamble": r"""
+   \usepackage[tt=false, type1=true]{libertine}
+   \usepackage[libertine]{newtxmath}
+   """
+})
 
 def darken(color):
     hue, saturation, value = rgb_to_hsv(to_rgb(color))
