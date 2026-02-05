@@ -1,5 +1,6 @@
 bugs_dir := source_dir()
-output_dir := "/scratch/$USER/memsafedb_bugs/"
+output_dir := "/scratch/$USER/memsafedb/bug_study/memsafedb_bugs/"
+cve_dir := "/scratch/$USER/memsafedb/bug_study/cve/"
 dockerfile_path := bugs_dir+"/Dockerfile"
 keywords := "buffer overflow|buffer overrun|buffer underflow|buffer underrun|out of bounds|array bounds|stack overflow|stack smashing|integer overflow|null pointer dereference|null pointer exception|double free|multiple free|uninitialized memory|use of uninitialized|wild pointer|dangling pointer|dangling reference|use after free|UAF|stack use after scope|stack use after return|memory safety|memory corruption|heap corruption|stack corruption|memory error|invalid memory access|illegal memory access|segmentation fault|SIGSEGV|address sanitizer|ASLR"
 # make the keywords fuzzy
@@ -11,6 +12,10 @@ scrape:
     mkdir -p {{output_dir}}
     rm -rf {{output_dir}}/*
     python3 scrape_bugs.py --output "{{output_dir}}"
+
+scrape_cves:
+    #!/usr/bin/env bash
+    python3 {{bugs_dir}}/scrape_cves.py --output "{{cve_dir}}"
 
 search_bugs dbms="":
     #!/usr/bin/env bash
