@@ -76,7 +76,7 @@ def analyse_dbms(dbms, cumulative_stats=None):
         if not os.path.exists(filename):
             print(f"File {filename} not found.")
             rep_sets.append(set())
-            rep_stats_list.append({'total': 0, 'bugs': 0, 'memory_safety': 0})
+            rep_stats_list.append({'total': 0, 'bugs': 0, 'programmer_error': 0, 'other': 0, 'memory_safety': 0})
             continue
             
         print(f"Reading {filename}...")
@@ -123,11 +123,15 @@ def analyse_dbms(dbms, cumulative_stats=None):
         rep_sets.append(current_rep_mem_safety)
         
         bug_count = current_rep_stats.get('bug', 0)
+        prog_count = current_rep_stats.get('programmer_error', 0)
+        other_count = current_rep_stats.get('other', 0)
         mem_safety_count = len(current_rep_mem_safety)
         
         rep_stats_list.append({
             'total': total_examined,
             'bugs': bug_count,
+            'programmer_error': prog_count,
+            'other': other_count,
             'memory_safety': mem_safety_count
         })
         
@@ -156,7 +160,7 @@ def analyse_dbms(dbms, cumulative_stats=None):
     while len(rep_sets) < 3:
         rep_sets.append(set())
     while len(rep_stats_list) < 3:
-        rep_stats_list.append({'total': 0, 'bugs': 0, 'memory_safety': 0})
+        rep_stats_list.append({'total': 0, 'bugs': 0, 'programmer_error': 0, 'other': 0, 'memory_safety': 0})
 
     # Add to cumulative stats if provided
     if cumulative_stats is not None:
@@ -284,14 +288,14 @@ def generate_cumulative_report(cumulative_stats):
     report_lines.append("")
     
     # Header
-    report_lines.append(f"{'Database':<15} {'Source':<12} {'Total CVEs':>12} {'Bugs':>10} {'Memory Safety':>15} {'Mem %':>10}")
+    report_lines.append(f"{'Database':<12} {'Source':<10} {'Total':>8} {'Bugs':>8} {'ProgErr':>8} {'Other':>8} {'MemSafe':>8} {'Mem%':>8}")
     report_lines.append("-" * 100)
     
     grand_totals = {
         'keywords': 0,
-        'rep1_total': 0, 'rep1_bugs': 0, 'rep1_mem': 0,
-        'rep2_total': 0, 'rep2_bugs': 0, 'rep2_mem': 0,
-        'rep3_total': 0, 'rep3_bugs': 0, 'rep3_mem': 0,
+        'rep1_total': 0, 'rep1_bugs': 0, 'rep1_prog': 0, 'rep1_other': 0, 'rep1_mem': 0,
+        'rep2_total': 0, 'rep2_bugs': 0, 'rep2_prog': 0, 'rep2_other': 0, 'rep2_mem': 0,
+        'rep3_total': 0, 'rep3_bugs': 0, 'rep3_prog': 0, 'rep3_other': 0, 'rep3_mem': 0,
     }
     
     for stats in cumulative_stats:
@@ -300,7 +304,7 @@ def generate_cumulative_report(cumulative_stats):
         # Keyword stats
         kw_count = stats['keyword_matches']
         grand_totals['keywords'] += kw_count
-        report_lines.append(f"{dbms:<15} {'Keywords':<12} {'-':>12} {'-':>10} {kw_count:>15} {'-':>10}")
+        report_lines.append(f"{dbms:<12} {'Keywords':<10} {'-':>8} {'-':>8} {'-':>8} {'-':>8} {kw_count:>8} {'-':>8}")
         
         # Rep stats
         for rep_num in [1, 2, 3]:
@@ -308,30 +312,37 @@ def generate_cumulative_report(cumulative_stats):
             rep = stats[rep_key]
             total = rep['total']
             bugs = rep['bugs']
+            prog = rep['programmer_error']
+            other = rep['other']
             mem = rep['memory_safety']
             mem_pct = (mem / bugs * 100) if bugs > 0 else 0
             
             grand_totals[f'rep{rep_num}_total'] += total
             grand_totals[f'rep{rep_num}_bugs'] += bugs
+            grand_totals[f'rep{rep_num}_prog'] += prog
+            grand_totals[f'rep{rep_num}_other'] += other
             grand_totals[f'rep{rep_num}_mem'] += mem
             
-            report_lines.append(f"{'':<15} {f'LLM Rep {rep_num}':<12} {total:>12} {bugs:>10} {mem:>15} {mem_pct:>9.1f}%")
+            report_lines.append(f"{'':<12} {f'Rep {rep_num}':<10} {total:>8} {bugs:>8} {prog:>8} {other:>8} {mem:>8} {mem_pct:>7.1f}%")
         
         report_lines.append("-" * 100)
     
     # Grand totals
     report_lines.append("")
     report_lines.append("GRAND TOTALS:")
-    report_lines.append(f"{'TOTAL':<15} {'Keywords':<12} {'-':>12} {'-':>10} {grand_totals['keywords']:>15} {'-':>10}")
+    report_lines.append(f"{'TOTAL':<12} {'Keywords':<10} {'-':>8} {'-':>8} {'-':>8} {'-':>8} {grand_totals['keywords']:>8} {'-':>8}")
     
     for rep_num in [1, 2, 3]:
         total = grand_totals[f'rep{rep_num}_total']
         bugs = grand_totals[f'rep{rep_num}_bugs']
+        prog = grand_totals[f'rep{rep_num}_prog']
+        other = grand_totals[f'rep{rep_num}_other']
         mem = grand_totals[f'rep{rep_num}_mem']
         mem_pct = (mem / bugs * 100) if bugs > 0 else 0
-        report_lines.append(f"{'':<15} {f'LLM Rep {rep_num}':<12} {total:>12} {bugs:>10} {mem:>15} {mem_pct:>9.1f}%")
+        report_lines.append(f"{'':<12} {f'Rep {rep_num}':<10} {total:>8} {bugs:>8} {prog:>8} {other:>8} {mem:>8} {mem_pct:>7.1f}%")
     
     report_lines.append("=" * 100)
+
     
     # Write report
     out_file = os.path.join(REPORTS_DIR, "cumulative_report.txt")

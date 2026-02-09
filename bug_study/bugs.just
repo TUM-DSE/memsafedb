@@ -47,7 +47,16 @@ build_docker:
     docker build -t llama-server-cuda -f {{ bugs_dir }}/Dockerfile {{ bugs_dir }} #> /dev/null 2>&1
 
 launch_server: download_model build_docker
-    docker run -d --device nvidia.com/gpu=all -v {{ models_dir }}:/models -p 8080:8080 llama-server-cuda > /dev/null 2>&1
+    docker run -d --device nvidia.com/gpu=all \
+        -v {{ models_dir }}:/models \
+        -p 8080:8080 \
+        llama-server-cuda \
+        --model /models/{{ model_name }} \
+        --n-gpu-layers 99 \
+        --ctx-size 4096 \
+        --batch-size 512 \
+        --parallel 4 \
+        --cont-batching > /dev/null 2>&1
 
 kill_server:
     docker stop $(docker ps -q --filter name=llama-server-cuda)
@@ -285,15 +294,29 @@ classify_cves +files:
             prompt_parts = [
                 "Analyze the following CVE (Common Vulnerabilities and Exposures) report.",
                 "First, classify the issue into one of the following types:",
-                '1. "bug": Actual bugs (flaws in the system implementation).',
+                '1. "bug": Actual bugs (flaws in the database system implementation).',
                 '2. "programmer_error": Problems on the side of the programmer (misuse).',
-                '3. "other": Requests or other issues (feature requests, questions, etc.).',
+                '3. "other": Issues outside the database system, requests, or other misc issues (feature requests, questions, etc.).',
                 "",
-                'Second, IF the issue is a "bug", determine if it describes a **Memory Safety Issue**.',
-                'Memory safety issues include: buffer overflow, use-after-free, double free, null pointer dereference, out-of-bounds access, uninitialized memory, etc.',
-                'If it is not a "bug", "is_memory_safety" must be false.',
+                "MEMORY SAFETY DETERMINATION:",
+                'IF issue_type is "bug", determine if it is a memory safety issue.',
+                'IF issue_type is NOT "bug", set is_memory_safety to false.',
                 "",
-                "CVE Report:",
+                "Memory safety issues INCLUDE:",
+                "- Buffer overflow, heap overflow, stack overflow",
+                "- Use-after-free, double-free, dangling pointer",
+                "- Null pointer dereference",
+                "- Out-of-bounds read/write",
+                "- Uninitialized memory access",
+                "- Integer overflow ONLY if it leads to memory corruption",
+                "",
+                "Memory safety issues DO NOT INCLUDE:",
+                "- SQL injection, XSS, CSRF (these are injection/logic bugs)",
+                "- Authentication bypass, privilege escalation (unless memory-related)",
+                "- Denial of service through resource exhaustion (unless memory corruption)",
+                "- Logic errors, race conditions (unless causing memory corruption)",
+                "",
+                "CVE REPORT:",
                 f"CVE ID: {cve_id}",
             ]
             
@@ -305,8 +328,8 @@ classify_cves +files:
             prompt_parts.append(f"Description: {desc}")
             prompt_parts.extend([
                 "",
-                "Task:",
-                "Classify this CVE. Answer with JSON format:",
+                "TASK:",
+                "Classify this CVE. Respond ONLY with valid JSON:",
                 json_template,
                 "Only provide the JSON."
             ])
