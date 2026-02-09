@@ -38,8 +38,7 @@ download_model:
         echo "Model already exists at $model_path"
     else
         echo "Downloading {{ model_name }} from Hugging Face..."
-        nix-shell -p huggingface-cli --run \
-            'huggingface-cli download {{ model_repo }} --include "{{ model_name }}" --local-dir {{ models_dir }}'
+        huggingface-cli download {{ model_repo }} --include "{{ model_name }}" --local-dir {{ models_dir }}
         echo "Model downloaded to $model_path"
     fi
 
