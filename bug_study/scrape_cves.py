@@ -20,7 +20,8 @@ import re
 CVE_LIST_URL = "https://github.com/CVEProject/cvelistV5/archive/refs/heads/main.zip"
 ZIP_FILE = "main.zip"
 UNZIP_DIR = "cvelistV5-main"
-DATABASES = ["mysql", "sqlite", "mariadb", "redis", "leveldb", "rocksdb", "duckdb", "ladybug", "postgresql"]
+DATABASES = ["mysql", "sqlite", "mariadb", "redis", "leveldb", "rocksdb", "duckdb", "ladybug", "postgresql", 
+                "mongodb", "memcached", "influxdb", "redshift"]
 
 
 def download_cve_list(output_dir: Path, force: bool = False) -> Path:
@@ -103,7 +104,7 @@ def scrape_cves(output_dir: Path, databases: list = None, force: bool = False):
     zip_path = download_cve_list(output_dir, force)
     cve_dir = extract_cve_list(zip_path, output_dir, force)
     
-    print(f"\n[INFO] Searching for CVEs in {len(databases)} databases...")
+    print(f"\n[INFO] Searching for CVEs for {len(databases)} databases...")
     
     # Search for each database
     for db in databases:
