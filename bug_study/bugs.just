@@ -25,9 +25,38 @@ default:
 #  llama-server Recipes
 # ========================================
 
+# Model configuration (Options: gpt-oss, llama4, llama3)
 models_dir := "/scratch/$USER/memsafedb/models"
-model_name := "Meta-Llama-3.1-8B-Instruct-Q8_0.gguf"
-model_repo := "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF"
+model_type := "gpt-oss"
+
+model_repo := if model_type == "gpt-oss" {
+    "unsloth/gpt-oss-120b-GGUF"
+} else if model_type == "llama4" {
+    "glogwa68/Llama-4-scout-GGUF"
+} else {
+    "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF"
+}
+
+model_name_pattern := if model_type == "gpt-oss" {
+    "Q4_K_M/*.gguf"
+} else if model_type == "llama4" {
+    "Llama-4-Scout-4bit-Q4_K_M.gguf"
+} else {
+    "Meta-Llama-3.1-8B-Instruct-Q8_0.gguf"
+}
+
+model_name := if model_type == "gpt-oss" {
+    "Q4_K_M/gpt-oss-120b-Q4_K_M-00001-of-00002.gguf"
+} else if model_type == "llama4" {
+    "Llama-4-Scout-4bit-Q4_K_M.gguf"
+} else {
+    "Meta-Llama-3.1-8B-Instruct-Q8_0.gguf"
+}
+
+ctx_size := "131072"
+batch_size := "2048"
+parallel := "16"
+gpu_layers := "99"
 
 download_model:
     #!/usr/bin/env bash
@@ -38,7 +67,7 @@ download_model:
         echo "Model already exists at $model_path"
     else
         echo "Downloading {{ model_name }} from Hugging Face..."
-        huggingface-cli download {{ model_repo }} --include "{{ model_name }}" --local-dir {{ models_dir }}
+        huggingface-cli download {{ model_repo }} --include "{{ model_name_pattern }}" --local-dir {{ models_dir }}
         echo "Model downloaded to $model_path"
     fi
 
@@ -51,14 +80,15 @@ launch_server: download_model build_docker
         -p 8080:8080 \
         llama-server-cuda \
         --model /models/{{ model_name }} \
-        --n-gpu-layers 99 \
-        --ctx-size 4096 \
-        --batch-size 512 \
-        --parallel 4 \
-        --cont-batching > /dev/null 2>&1
+        --n-gpu-layers {{ gpu_layers }} \
+        --ctx-size {{ ctx_size }} \
+        --batch-size {{ batch_size }} \
+        --parallel {{ parallel }} \
+        --cont-batching \
+        --host 0.0.0.0 > /dev/null 2>&1
 
 kill_server:
-    docker stop $(docker ps -q --filter name=llama-server-cuda)
+    docker stop $(docker ps -q --filter ancestor=llama-server-cuda)
 
 # ========================================
 #  Bug Classification Recipes
@@ -120,7 +150,8 @@ classify_bugs +files:
                 "messages": [                                       
                     {"role": "system", "content": SYSTEM_PROMPT}, 
                     {"role": "user", "content": user_prompt}
-                ]                                                   
+                ],
+                "max_tokens": 1024
             }
 
             response = requests.post(API_URL, json=payload)
@@ -130,21 +161,25 @@ classify_bugs +files:
 
             output = {                                                                  
                 "file": bug_file,                                                       
-                "classification": json.loads(content) if "{" in content else content
+                "classification": content
             }
-            if isinstance(output["classification"], str):
-                 try:
-                     output["classification"] = json.loads(output["classification"])
-                 except:
-                     pass
+            
+            # Extract JSON block if present (helpful for reasoning models)
+            if "{" in content:
+                json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                if json_match:
+                    try:
+                        output["classification"] = json.loads(json_match.group(0))
+                    except:
+                        pass
 
-            print(json.dumps(output))
+            print(json.dumps(output), flush=True)
             return output
 
         except Exception as e:
             return None
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
         futures = [executor.submit(process_file, f) for f in files]
         for future in tqdm(concurrent.futures.as_completed(futures), total=len(files)):
             future.result()
@@ -376,14 +411,14 @@ classify_cves +files:
                 "classification": classification
             }
 
-            print(json.dumps(output))
+            print(json.dumps(output), flush=True)
             return output
 
         except Exception as e:
 
             return None
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
         futures = [executor.submit(process_file, f) for f in files]
         for future in tqdm(concurrent.futures.as_completed(futures), total=len(files)):
             future.result()
@@ -393,6 +428,7 @@ run_all_cves:
     set -e
     mkdir -p {{ cve_dir }}/cve_results
 
+    # for dbms in "redis"; do
     for dbms in "mysql" "sqlite" "mariadb" "redis" "leveldb" "rocksdb" "duckdb" "ladybug" "postgresql" "mongodb" "memcached" "influxdb" "redshift"; do
         START=$(date +%s)
         echo "--------------------------------------------------"
