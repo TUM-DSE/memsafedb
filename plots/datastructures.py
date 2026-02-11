@@ -202,7 +202,8 @@ def plot_datastructures(df):
             caption = f"({chr(97+i)}) {sys.title()}."
         if sys == 'art': caption = f"({chr(97+i)}) ART."
         
-        ax.text(0.5, -0.35, caption, transform=ax.transAxes, ha='center', va='top', fontsize=FONTSIZE_TITLE+2, fontweight='bold')
+        caption = r"\textbf{" + caption + "}"
+        ax.text(0.5, -0.35, caption, transform=ax.transAxes, ha='center', va='top', fontsize=FONTSIZE_TITLE+2)
         
         ax.set_xlabel('')
         ax.set_ylabel('Normalized Runtime' if i % 3 == 0 else '', fontsize=FONTSIZE_AXIS_LABEL)
