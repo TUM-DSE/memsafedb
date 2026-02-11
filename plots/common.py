@@ -93,11 +93,11 @@ marker_def = [
     "+",
 ]
 
-BASELINE_MTE_COLOR = '#A6CEE3'  # Light Blue
-MTE_COLOR = '#1F78B4'           # Dark Blue
+BASELINE_MTE_COLOR = '#1F78B4' # 'A6CEE3'  # Dark blue
+MTE_COLOR = '#A6CEE3'          # Light blue
 ASAN_COLOR = '#984EA3'          # Purple
-BASELINE_CHERI_COLOR = '#FDBF6F' # Light Orange
-CHERI_COLOR = '#FF7F00'          # Dark Orange
+BASELINE_CHERI_COLOR = '#FF7F00' # 'FDBF6F' # Dark Orange
+CHERI_COLOR = '#FDBF6F'          # Light Orange
 
 BASELINE_MTE_HATCH = ''
 MTE_HATCH = '///'

@@ -760,35 +760,35 @@ def plot_leveldb_motivation_slowdown(df: pd.DataFrame):
         aggfunc='mean'
     )
     
-    variants_interest = ['release-dynamic', 'release-mte', 'release-asan', 'release-static', 'release-cheri']
+    variants_interest = ['release-dynamic', 'release-asan','release-mte', 'release-static', 'release-cheri']
     baseline_map = {
         'release-dynamic': 'release-dynamic',
-        'release-mte': 'release-dynamic',
         'release-asan': 'release-dynamic',
+        'release-mte': 'release-dynamic',
         'release-static': 'release-static',
         'release-cheri': 'release-static'
     }
     
     display_labels = {
         'release-dynamic': 'Base',
-        'release-mte': 'MTE',
         'release-asan': 'ASan',
+        'release-mte': 'MTE',
         'release-static': 'Base',
         'release-cheri': 'CHERI'
     }
     
     variant_colors = {
         'release-dynamic': BASELINE_MTE_COLOR,
-        'release-mte': MTE_COLOR,
         'release-asan': ASAN_COLOR,
+        'release-mte': MTE_COLOR,
         'release-static': BASELINE_CHERI_COLOR,
         'release-cheri': CHERI_COLOR
     }
     
     variant_hatches = {
         'release-dynamic': BASELINE_MTE_HATCH,
-        'release-mte': MTE_HATCH,
         'release-asan': ASAN_HATCH,
+        'release-mte': MTE_HATCH,
         'release-static': BASELINE_CHERI_HATCH,
         'release-cheri': CHERI_HATCH
     }
@@ -860,7 +860,7 @@ def plot_leveldb_motivation_slowdown(df: pd.DataFrame):
         title_rect = patches.Rectangle((0, 1), 1, title_height, transform=ax.transAxes, facecolor='#E0E0E0', edgecolor='none', clip_on=False)
         ax.add_patch(title_rect)
         
-        ax.text(0.5, 1 + title_height/2, workload, transform=ax.transAxes, ha='center', va='center', fontsize=FONTSIZE_TITLE, color='black', fontweight='bold')
+        ax.text(0.5, 1 + title_height/2, workload, transform=ax.transAxes, ha='center', va='center', fontsize=FONTSIZE, color='black', fontweight='bold')
         ax.set_xticks(counts)
         ax.set_xticklabels([display_labels[v] for v in variants_interest], fontsize=FONTSIZE_TICK_LABEL, rotation=0)
         ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers_tweaked))

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from common import *
+import matplotlib.patches as mpatches
 
 def sort_workload(s):
     parts = s.split(' ')
@@ -24,185 +25,271 @@ def format_val_time(val):
         return "{}ns".format(int(val))
 
 def load_data(host) -> pd.DataFrame:
-    df_tmp = pd.read_csv(result_dir+'/datastructures_{}.csv'.format(host))
-    # TODO: this selects only 1, 16 and 192 threads for MTE and 1, 4 for CHERI
+    csv_path = os.path.join(result_dir, 'datastructures_{}.csv'.format(host))
+    if not os.path.exists(csv_path):
+        print(f"Warning: {csv_path} not found.")
+        return pd.DataFrame()
+
+    df_tmp = pd.read_csv(csv_path)
+    # Filter threads
     df_tmp = df_tmp[(df_tmp['host'] == 'ace') & ((df_tmp['nthreads'] == 1) | (df_tmp['nthreads'] == 4)) |
                     (df_tmp['host'] == 'eliza') & ((df_tmp['nthreads'] == 1) | (df_tmp['nthreads'] == 16) | (df_tmp['nthreads'] == 192))]
-    df_tmp = df_tmp[(df_tmp['name'] != 'readmodifywrite') & (df_tmp['name'] != 'YCSB-A') & (df_tmp['name'] != 'YCSB-B') & (df_tmp['name'] != 'YCSB-C') & (df_tmp['name'] != 'YCSB-D') & (df_tmp['name'] != 'YCSB-E') & (df_tmp['name'] != 'YCSB-F')]
+    
+    # Filter ignored benchmarks
+    ignored = ['readmodifywrite', 'YCSB-A', 'YCSB-B', 'YCSB-C', 'YCSB-D', 'YCSB-E', 'YCSB-F']
+    df_tmp = df_tmp[~df_tmp['name'].isin(ignored)]
+    
     df_tmp['memsafe'] = df_tmp['arch'].map({'aarch64': 'unsafe', 'mte': 'safe', 'cheri': 'safe'})
     df_tmp = df_tmp[[x for x in df_tmp.columns if x != 'nb_ops']]
+    
     df = df_tmp.copy()
+    # Create key for pivoting
     df['fkey'] = df[[x for x in df.columns if x not in ['latency', 'arch', 'memsafe']]].apply(lambda x: '-'.join(x.astype(str).values), axis=1)
     df['expe'] = df['host'].map({'eliza': 'MTE', 'ace': 'CHERI'})
-    df = df[[ x for x in df.columns if x not in ['arch']]]
+    
+    # Calculate overhead
     agg = df.pivot(index='fkey', columns='memsafe', values='latency')
+    if 'safe' not in agg.columns or 'unsafe' not in agg.columns:
+        return pd.DataFrame()
+        
     agg['overhead'] = agg['safe'] / agg['unsafe']
     agg = agg.reset_index()
-    df = df[[ x for x in df.columns if x not in ['mean', 'memsafe']]].drop_duplicates()
-    joined = pd.merge(agg, df, on='fkey', how='inner')
+    
+    # Merge back to get metadata
+    meta = df[[x for x in df.columns if x not in ['latency', 'memsafe', 'arch']]].drop_duplicates()
+    joined = pd.merge(agg[['fkey', 'overhead', 'safe', 'unsafe']], meta, on='fkey', how='inner')
+    
+    # Renaming
     joined['name'] = joined['name'].replace({"readmodifywrite": "rmw", "queue_bench": "queue"})
-    #joined['nthreads'] = joined['nthreads'].replace({1: '', 4: '4T', 8: '8T', 16: '16T', 32: '32T', 64: '64T', 96: '96T'})
-    joined = joined[joined['nthreads'] != 16]
-    joined['nthreads'] = joined['nthreads'].replace({1: '', 4: 'SMT', 192: 'SMT'})
-    joined['bench'] = joined['name'] + ' ' + joined['nthreads'].astype(str)
-    joined = joined[[x for x in joined.columns if x not in ['fkey', 'name', 'nthreads', 'latency']]]
-    """all_res = df_tmp
-    all_res['name'] = all_res['name'].replace({"readmodifywrite": "rmw", "queue_bench": "queue"})
-    all_res['nthreads'] = all_res['nthreads'].replace({1: '', 4: '4', 8: '8', 16: '16', 32: '32', 64: '64', 96: '96'})
-    all_res['bench'] = all_res['name'] + ' ' + all_res['nthreads'].astype(str)
-    all_res = all_res[[x for x in all_res.columns if x not in ['name', 'nthreads', 'host', 'arch']]]"""
+    joined = joined[joined['nthreads'] != 16] # Filter out 16T explicitly as in original
+    joined['nthreads_str'] = joined['nthreads'].replace({1: '', 4: 'SMT', 192: 'SMT'}).astype(str)
+    
+    # Create display bench name (e.g. "bst SMT")
+    joined['bench'] = joined.apply(lambda row: f"{row['name']} {row['nthreads_str']}".strip(), axis=1)
+    
     return joined
 
 def compute_std(overhead):
-    std_overhead = overhead.groupby([ x for x in overhead.columns if x not in ['repetition', 'safe', 'unsafe', 'overhead']])['overhead'].agg(['mean', 'std']).reset_index()
-    std_overhead['max'] = std_overhead['mean'] + std_overhead['std']
-    std_overhead['min'] = std_overhead['mean'] - std_overhead['std']
+    std_overhead = overhead.groupby(['system', 'bench', 'expe'])['overhead'].agg(['mean', 'std', 'max', 'min']).reset_index()
+    std_overhead['err_max'] = std_overhead['mean'] + std_overhead['std']
+    std_overhead['err_min'] = std_overhead['mean'] - std_overhead['std']
     return std_overhead
 
-def main():
-    expes = ['MTE', 'CHERI']
-    colors = ["tab:green", "tab:blue"]
+def plot_datastructures(df):
+    if df.empty:
+        print("No data loaded.")
+        return
+
+    systems = sorted(df['system'].unique())
+    # Reorder to put 'art' and 'queue' in the first column (indices 0 and 3)
+    # Remaining systems fill indices 1, 2, 4, 5
+    priority = ['art', 'queue']
+    others = [s for s in systems if s not in priority]
     
-    for cid, xp in zip(range(len(expes)), expes):
-        overhead = load_data(xp.lower())
-        fig, ax = plt.subplots(3, 2, figsize=(figwidth_full, fig_height*3))
-        systems = overhead['system'].unique()
-        std_overhead = compute_std(overhead)
-        grouped_overhead = std_overhead.groupby([x for x in std_overhead.columns if x not in ['bench', 'mean', 'std', 'max', 'min']])['mean'].agg('mean').reset_index()
-        for i, sys in zip(range(len(systems)), systems):
-            cur_ax = ax[int(i/2)][i%2]
-            cur_ax.axhline(y=1, color='red', zorder=0)
-            sorted_confs = sorted(overhead[overhead['system'] == sys]['bench'].unique(), key = sort_workload)
-            sns.barplot(ax=cur_ax, data=overhead[overhead['system'] == sys], x = "bench", y = "overhead", order=sorted_confs, edgecolor="black", errorbar=("sd"), color=colors[cid])
-           
-            for p in cur_ax.patches:
-                height = p.get_height()
-                y_pos = height
-                if xp == "MTE":
-                    if sys == "queue":
-                        y_pos = 1.15  
-                cur_ax.text(x=p.get_x() + p.get_width() / 2,
-                        y = y_pos, s=f'{height:.2f}',
-                        ha='center', va='bottom',
-                        fontsize=FONTSIZE-2)
-            cur_ax.set_xlabel("")
-            rotation = 0
-            if len(overhead[overhead['system'] == sys]['bench'].unique()) > 6:
-                if len(overhead[overhead['system'] == sys]['bench'].unique()) > 15:
-                    cur_ax.tick_params(axis='x', labelrotation=90)
-                    rotation = 90
-                else:
-                    cur_ax.tick_params(axis='x', labelrotation=45)
-                    rotation = 45
-            else:
-                cur_ax.tick_params(axis='x', pad=5)
-            cur_ax.set_ylabel("Normalized\nlatency", fontsize=FONTSIZE)
-            max_val = std_overhead[(std_overhead.system == sys)]['max'].max()
-            cur_ax.set_ylim(0.8, max_val*1.2)
-            cur_ax.set_xticklabels(cur_ax.get_xticklabels(), size=FONTSIZE-1)
-            cur_ax.set_yticklabels(cur_ax.get_yticklabels(), size=FONTSIZE)
-            baseline_agg = overhead[overhead['system'] == sys].groupby([ x for x in overhead.columns if x not in ['repetition', 'safe', 'unsafe', 'overhead']])['unsafe'].agg(['mean', 'std']).reset_index()
-            baseline_val = baseline_agg[baseline_agg['system'] == sys].sort_values(by="bench", key=lambda x: natsorted(baseline_agg[baseline_agg['system'] == sys]['bench'], alg=ns.NUMAFTER))['mean']
-            for i, tick in enumerate(cur_ax.get_xticklabels()):
-                if i == 0:
-                    cur_ax.text(x=i-0.5, y=-0.08, s="Baseline:", ha='right', va='top', transform=cur_ax.get_xaxis_transform(), fontsize=FONTSIZE-1, color='gray')
-                if baseline_val[i] > 1_000_000:
-                    val = "{:.2f}ms".format(baseline_val[i]/1_000_000)
-                elif baseline_val[i] > 10_000:
-                    val = "{}µs".format(int(baseline_val[i]/1000))
-                elif baseline_val[i] > 1_000:
-                    val = "{:.2f}µs".format(baseline_val[i]/1000)
-                else:
-                    val = "{}ns".format(int(baseline_val[i]))
-                pos_y = -0.1
-                cur_ax.text(x=i, y=pos_y, s=val,
-                            ha='center', va='top', transform=cur_ax.get_xaxis_transform(),
-                            color='gray', fontsize=FONTSIZE-2)
-            #ax[int(i/2)][i%2].get_legend().remove()
-            cur_ax.set_title(sys+" (mean: x{:.2f})".format(grouped_overhead[grouped_overhead['system'] == sys]['mean'].to_list()[0]))
+    ordered_systems = []
+    # Index 0: art
+    ordered_systems.append('art' if 'art' in systems else (others.pop(0) if others else ''))
+    # Index 1: other
+    ordered_systems.append(others.pop(0) if others else '')
+    # Index 2: other
+    ordered_systems.append(others.pop(0) if others else '')
+    # Index 3: queue
+    ordered_systems.append('queue' if 'queue' in systems else (others.pop(0) if others else ''))
+    # Index 4: other
+    ordered_systems.append(others.pop(0) if others else '')
+    # Index 5: other
+    ordered_systems.append(others.pop(0) if others else '')
+    
+    # Clean empty placeholders if less than 6 systems
+    ordered_systems = [s for s in ordered_systems if s]
+    
+    n_systems = len(ordered_systems)
+    if n_systems > 6:
+        print(f"Warning: {n_systems} systems found, but grid is 2x3. Some might be cut off or squeezed.")
+    
+    fig = plt.figure(figsize=(figwidth_full, 2* fig_height))
+    # Adjust width ratios: first column narrower, others wider
+    gs = fig.add_gridspec(2, 3, hspace=0.6, wspace=0.3, width_ratios=[0.85, 1.1, 1.1])
+    
+    axes = []
+    for i in range(2):
+        for j in range(3):
+            axes.append(fig.add_subplot(gs[i, j]))
 
-        plt.tight_layout()
-        plt.suptitle(lower_better_str, color='blue')
-        plt.subplots_adjust(wspace=0.25)
-        plt.savefig(os.path.join(result_dir, "datastructures_{}.pdf".format(xp)), format="pdf", pad_inches=0, bbox_inches="tight")
+    palette_map = {'MTE': MTE_COLOR, 'CHERI': CHERI_COLOR}
+    hatch_map = {'MTE': MTE_HATCH, 'CHERI': CHERI_HATCH}
 
-    # Per-system plot
-    overhead = pd.concat([load_data("mte"), load_data("cheri")])
-    systems = overhead['system'].unique()
-    std_overhead = compute_std(overhead)
-    grouped_overhead = std_overhead.groupby([x for x in std_overhead.columns if x not in ['bench', 'mean', 'std', 'max', 'min']])['mean'].agg('mean').reset_index()
-    for sys in systems:
-        fig, ax = plt.subplots(1, 1, figsize=(figwidth_half, fig_height))
-        cur_ax = ax
-        cur_ax.axhline(y=1, color='red', zorder=0)
-        sorted_confs = sorted(overhead[overhead['system'] == sys]['bench'].unique(), key = sort_workload)
-        sns.barplot(ax=cur_ax, data=overhead[overhead['system'] == sys], x = "bench", y = "overhead", order=sorted_confs, hue="expe", palette = colors, edgecolor="black", errorbar=("sd"))
-        for i, p in zip(range(len(cur_ax.patches)), cur_ax.patches):
-            if p.get_x() == 0 and p.get_y() == 0:
-               continue
-            hatch = hatch_def[0] if i < len(cur_ax.patches)/2-1 else hatch_def[1]
-            height = p.get_height()
-            cur_ax.text(x=p.get_x() + p.get_width() / 2,
-                            y = p.get_height(), s=f'{height:.2f}',
-                            ha='center', va='bottom',
-                            fontsize=FONTSIZE-2)
-            p.set_hatch(hatch)
-        cur_ax.set_xlabel("")
-        rotation = 0
-        if len(overhead[overhead['system'] == sys]['bench'].unique()) > 6:
-            if len(overhead[overhead['system'] == sys]['bench'].unique()) > 15:
-                cur_ax.tick_params(axis='x', labelrotation=90)
-                rotation = 90
-            else:
-                cur_ax.tick_params(axis='x', labelrotation=45)
-                rotation = 45
-        else:
-            cur_ax.tick_params(axis='x', pad=5)
-        baseline_agg = overhead[overhead['system'] == sys].groupby([ x for x in overhead.columns if x not in ['repetition', 'safe', 'unsafe', 'overhead', 'expe']])['unsafe'].agg(['mean', 'std']).reset_index()
-        baseline_val = baseline_agg[baseline_agg['system'] == sys].sort_values(by='bench', key=lambda x: natsorted(baseline_agg[baseline_agg['system'] == sys]['bench'], alg=ns.NUMAFTER))['mean']
-        shift = 1/4
-        for i, tick in enumerate(cur_ax.get_xticklabels()):
-            cur_ax.text(x=i-shift, y=-0.1, s=format_val_time(baseline_val[i]),
-                        ha='center', va='top', transform=cur_ax.get_xaxis_transform(),
-                        color='gray', fontsize=FONTSIZE-2)
-            cur_ax.text(x=i+shift, y=-0.1, s=format_val_time(baseline_val[i+len(baseline_val)/2]),
-                        ha='center', va='top', transform=cur_ax.get_xaxis_transform(),
-                        color='gray', fontsize=FONTSIZE-2)
-        cur_ax.text(x=-0.5, y=-0.08, s="Baseline:", ha='right', va='top', transform=cur_ax.get_xaxis_transform(), fontsize=FONTSIZE-1, color='gray') 
-        cur_ax.set_ylabel("Normalized\nlatency", fontsize=FONTSIZE)
-        cur_ax.set_xticklabels(cur_ax.get_xticklabels(), size=FONTSIZE-1)
-        cur_ax.set_yticklabels(cur_ax.get_yticklabels(), size=FONTSIZE)
-        max_val = std_overhead[(std_overhead.system == sys)]['max'].max()
-        cur_ax.set_ylim(0.8, max_val*1.4)
-        handles, labels = cur_ax.get_legend_handles_labels()
-        leg = [
-            mpl.patches.Patch(facecolor=colors[0], hatch=hatch_def[0], edgecolor="black"),
-            mpl.patches.Patch(facecolor=colors[1], hatch=hatch_def[1], edgecolor="black")
-        ]
-        cur_ax.legend(leg, labels, loc="upper right", title=None, fontsize=FONTSIZE-2,
-            #bbox_to_anchor=(0.5, 0.07),
-            ncol=2,
+
+
+    for i, sys in enumerate(ordered_systems):
+        if i >= 6: break
+        ax = axes[i]
+        
+        sys_data = df[df['system'] == sys].copy()
+        
+        bench_order = sorted(sys_data['bench'].unique(), key=sort_workload)
+        
+        sns.barplot(
+            ax=ax,
+            data=sys_data,
+            x='bench',
+            y='overhead',
+            hue='expe',
+            order=bench_order,
+            hue_order=['MTE', 'CHERI'],
+            palette=palette_map,
+            edgecolor='black',
+            errorbar='sd',
+            width=0.8
         )
-        #cur_ax.legend_ = None
-        #cur_ax.set_title(sys+" (mean: x{:.2f})".format(grouped_overhead[grouped_overhead['system'] == sys]['mean'].to_list()[0]))
-        cur_ax.set_title(sys, color='black')
-        cur_ax.annotate(lower_better_str, color='blue', xy=(0.05, 0.75), xycoords='figure fraction', annotation_clip=False, fontsize=FONTSIZE)
+        
+        if len(ax.containers) == 2:
+            for bar in ax.containers[0]:
+                bar.set_hatch(MTE_HATCH)
+                bar.set_edgecolor('black')
+            for bar in ax.containers[1]:
+                bar.set_hatch(CHERI_HATCH)
+                bar.set_edgecolor('black')
+        else:
+            pass
 
-        plt.tight_layout()
-        #plt.suptitle(lower_better_str, color='blue')
-        #plt.subplots_adjust(wspace=0.25)
-        plt.savefig(os.path.join(result_dir, "datastructures_{}.pdf".format(sys)), format="pdf", pad_inches=0, bbox_inches="tight")
+        # Calculate stats for annotations and ylim
+        stats = sys_data.groupby(['bench', 'expe'])['overhead'].agg(['mean', 'std']).reset_index()
+        stats['std'] = stats['std'].fillna(0)
+        
+        annot_max_y = 0
+
+        hues = ['MTE', 'CHERI']
+        for container_idx, container in enumerate(ax.containers):
+            if container_idx >= len(hues): break
+            expe = hues[container_idx]
+            for j, bar in enumerate(container):
+                if j >= len(bench_order): break
+                bench = bench_order[j]
+                
+                row = stats[(stats['bench'] == bench) & (stats['expe'] == expe)]
+                if row.empty: continue
+                
+                mean = row['mean'].values[0]
+                std = row['std'].values[0]
+                
+                if pd.isna(mean) or mean == 0: continue
+                
+                # Position above bar or error bar
+                y_pos = mean + std
+                annot_max_y = max(annot_max_y, y_pos)
+                
+                pct = (mean - 1) * 100
+                if abs(pct) < 1: # Show 0% if very small
+                    txt = f"${pct:+.0f}\\%$"
+                else:
+                    txt = f"${pct:+.0f}\\%$"
+
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    y_pos + 0.01, # Padding
+                    txt,
+                    ha='center', va='bottom',
+                    fontsize=FONTSIZE_ANNOTATION
+                )
+
+        ax.axhline(y=1.0, color='red', linestyle='--', linewidth=1, alpha=0.7, zorder=0)
+        
+        # ax.set_title(sys, fontsize=FONTSIZE_TITLE, fontweight='bold', pad=15)
+        caption = f"({chr(97+i)}) {sys}."
+        # Use simple heuristic for capitalization if mostly lowercase
+        if sys.islower():
+            caption = f"({chr(97+i)}) {sys.title()}."
+        if sys == 'art': caption = f"({chr(97+i)}) ART."
+        
+        ax.text(0.5, -0.35, caption, transform=ax.transAxes, ha='center', va='top', fontsize=FONTSIZE_TITLE+2, fontweight='bold')
+        
+        ax.set_xlabel('')
+        ax.set_ylabel('Normalized Runtime' if i % 3 == 0 else '', fontsize=FONTSIZE_AXIS_LABEL)
+        
+        ax.tick_params(axis='x', labelsize=FONTSIZE_TICK_LABEL)
+        ax.tick_params(axis='y', labelsize=FONTSIZE_TICK_LABEL)
+        
+        # Adjust Y limits based on max annotation height
+        ax.set_ylim(0.95, max(1.1, annot_max_y * 1.15))
+        
+        if ax.get_legend():
+            ax.get_legend().remove()
+
+        baseline_agg = sys_data.groupby(['bench', 'expe'])['unsafe'].mean()
+        
+        y_txt = -0.03
+        width = 0.8
+        n_hues = 2
+        
+        bar_width = width / n_hues
+        offsets = {'MTE': -bar_width*2/3, 'CHERI': bar_width*2/3}
+        
+        for idx, bench in enumerate(bench_order):
+            for expe in ['MTE', 'CHERI']:
+                if (bench, expe) in baseline_agg.index:
+                    val = baseline_agg[(bench, expe)]
+                    txt = format_val_time(val)
+                    
+                    x_pos = idx + offsets[expe]
+                    
+                    ax.text(
+                        x_pos, y_txt, 
+                        txt, 
+                        ha='center', va='top', 
+                        transform=ax.get_xaxis_transform(),
+                        color='gray', 
+                        fontsize=FONTSIZE_TICK_LABEL-2 # Slightly smaller to fit
+                    )
+        
+        # "Baseline:" label
+        if i % 3 == 0:
+            ax.text(
+                -0.6, y_txt, 
+                "Baseline:", 
+                ha='right', va='top', 
+                transform=ax.get_xaxis_transform(), 
+                color='gray', 
+                fontsize=FONTSIZE_TICK_LABEL-1
+            )
+
+    # Clean empty axes
+    for k in range(len(systems), 6):
+        axes[k].set_visible(False)
+
+    # Global Legend
+    legend_patches = [
+        mpatches.Patch(facecolor=MTE_COLOR, hatch=MTE_HATCH, label='MTE', edgecolor='black'),
+        mpatches.Patch(facecolor=CHERI_COLOR, hatch=CHERI_HATCH, label='CHERI', edgecolor='black')
+    ]
+    
+    fig.legend(
+        handles=legend_patches,
+        loc='upper center',
+        bbox_to_anchor=(0.5, 0.98),
+        ncol=2,
+        fontsize=FONTSIZE_LEGEND,
+        frameon=True
+    )
+    
+    fig.text(0.5, 0.915, lower_better_str, ha='center', va='top', color='blue', fontsize=FONTSIZE_TITLE)
+    
+    plt.tight_layout(rect=[0, 0, 1, 0.93])
+    output_path = os.path.join(result_dir, "datastructures_all.pdf")
+    plt.savefig(output_path, format='pdf', bbox_inches='tight')
+    plt.close()
+    print("Generated datastructures_all.pdf")
+
+def main():
+    mte_df = load_data('mte')
+    cheri_df = load_data('cheri')
+    
+    if mte_df.empty and cheri_df.empty:
+        print("No data found.")
+        return
+        
+    full_df = pd.concat([mte_df, cheri_df], ignore_index=True)
+    plot_datastructures(full_df)
 
 if __name__ == "__main__":
     main()
-
-
-
-"""
-            labels = cur_ax.bar_label(cur_ax.containers[0], fontsize=FONTSIZE-2, labels=[f"x{a:.2f}" for a in std_overhead[std_overhead['system']==sys]['mean']], padding=1)
-            for label in labels:
-                bar_height = label.xy[1]
-                if bar_height < clamp_y:
-                    label.set_textcoords('data')
-                    label.set_position((label.xy[0], clamp_y))
-"""
