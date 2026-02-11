@@ -20,9 +20,9 @@ RUN git clone https://github.com/ggml-org/llama.cpp/ /app/llama.cpp
 # Set working directory
 WORKDIR /app/llama.cpp
 
-# --- FIX FOR LINKER ERROR ---
+# --- FIX FOR LINKER ERROR (BUILD TIME ONLY) ---
 # 1. Symlink libcuda.so to libcuda.so.1 inside the stubs directory
-# 2. Add the stubs directory to LD_LIBRARY_PATH so the linker finds it
+# 2. Add the stubs directory to LD_LIBRARY_PATH so the linker finds it during build
 RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs:${LD_LIBRARY_PATH}
 
@@ -31,6 +31,11 @@ RUN cmake -B build -DGGML_CUDA=ON
 
 # Build the project
 RUN cmake --build build --config Release -j $(nproc)
+
+# --- REMOVE STUBS FROM RUNTIME LD_LIBRARY_PATH ---
+# The stubs are only needed for building, not runtime
+# At runtime, the real NVIDIA drivers will be injected by the container runtime
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64
 
 # Expose the default server port
 EXPOSE 8080
