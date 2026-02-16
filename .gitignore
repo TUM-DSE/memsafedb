@@ -2,3 +2,4 @@ results
 plots/__pycache__
 **/dump.rdb
 **/__pycache__
+models/
