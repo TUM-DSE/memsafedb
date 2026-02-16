@@ -1,5 +1,5 @@
 bugs_dir := source_dir()
-output_dir := "/scratch/$USER/memsafedb/bug_study/memsafedb_bugs/"
+bugs_output_dir := "/scratch/$USER/memsafedb/bug_study/memsafedb_bugs/"
 cve_dir := "/scratch/$USER/memsafedb/bug_study/cve/"
 dockerfile_path := bugs_dir + "/Dockerfile"
 
@@ -96,23 +96,32 @@ kill_server:
 # ========================================
 scrape_bugs:
     #!/usr/bin/env bash
-    mkdir -p {{ output_dir }}
-    rm -rf {{ output_dir }}/*
-    python3 scrape_bugs.py --output "{{ output_dir }}"
+    mkdir -p {{ bugs_output_dir }}
+    rm -rf {{ bugs_output_dir }}/*
+    python3 scrape_bugs.py --output "{{ bugs_output_dir }}"
 
 search_bugs dbms="":
     #!/usr/bin/env bash
-    grep -lEi "{{ keywords }}" {{ output_dir }}/{{ dbms }}/*.json || true
+    find "{{ bugs_output_dir }}/{{ dbms }}" -maxdepth 1 -name "*.json" -type f -print0 2>/dev/null | \
+        xargs -0 -r grep -lEi "{{ keywords }}" || true
 
-classify_bugs +files:
+classify_bugs +files="":
     #!/usr/bin/env python3
     import sys
     import json
     import requests
     import os
+    import re
     import concurrent.futures
-    from tqdm import tqdm
-    files = "{{ files }}".split()
+    
+    # Read files from arguments if provided, otherwise from stdin
+    args_files = "{{ files }}".strip()
+    if args_files:
+        files = args_files.split()
+    else:
+        # Read from stdin (null-separated from xargs -0)
+        files = sys.stdin.read().strip('\0').split('\0')
+        files = [f for f in files if f]  # Remove empty strings
 
     API_URL = "http://localhost:8080/v1/chat/completions"
     MODEL = "{{ model_name }}"
@@ -173,43 +182,53 @@ classify_bugs +files:
                     except:
                         pass
 
-            print(json.dumps(output), flush=True)
             return output
 
         except Exception as e:
+            print(f"Error processing {bug_file}: {e}", file=sys.stderr, flush=True)
             return None
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
         futures = [executor.submit(process_file, f) for f in files]
-        for future in tqdm(concurrent.futures.as_completed(futures), total=len(files)):
-            future.result()
+        total = len(files)
+        completed = 0
+        for future in concurrent.futures.as_completed(futures):
+            result = future.result()
+            if result:
+                print(json.dumps(result), flush=True)
+            completed += 1
+            if completed % 10 == 0:
+                print(f"Progress: {completed}/{total}", file=sys.stderr, flush=True)
 
 run_all_bugs:
     #!/usr/bin/env bash
     set -e
-    mkdir -p dataset
+    mkdir -p {{ bugs_output_dir }}/bug_results
 
-    for dbms in "LevelDB" "DuckDB" "Redis" "RocksDB"; do
+    for dbms in "DuckDB" "Redis" "RocksDB" "MongoDB" "ClickHouse" "CockroachDB" "MariaDB" "MySQL" "LevelDB"; do
         START=$(date +%s)
         echo "--------------------------------------------------"
         echo "Processing $dbms"
-        echo "--------------------------------------------------"
+        echo "--------------------------------------------------"    
 
-        if ! ls {{ output_dir }}/$dbms/*.json >/dev/null 2>&1; then
-            echo "No files found for $dbms."
+        json_count=$(find "{{ bugs_output_dir }}/$dbms" -maxdepth 1 -name "*.json" -type f 2>/dev/null | wc -l)
+        if [ "$json_count" -eq 0 ]; then
+            echo "No JSON files found for $dbms."
             continue
         fi
-
+        echo "Found $json_count JSON files for $dbms"
+        
         matches_str=$(just -f {{ bugs_dir }}/bugs.just search_bugs "$dbms")
         if [ -z "$matches_str" ]; then
-            echo "[]" > dataset/matches_${dbms}.json
+            echo "[]" > {{ bugs_output_dir }}/bug_results/matches_${dbms}.json
         else
-            echo "$matches_str" | jq -R . | jq -s . > dataset/matches_${dbms}.json
+            echo "$matches_str" | jq -R . | jq -s . > {{ bugs_output_dir }}/bug_results/matches_${dbms}.json
         fi
 
         for rep in 1 2 3; do
-            outfile="dataset/${dbms}_rep${rep}.json"
-            just -f {{ bugs_dir }}/bugs.just classify_bugs {{ output_dir }}/$dbms/*.json > "$outfile"
+            outfile="{{ bugs_output_dir }}/bug_results/${dbms}_rep${rep}.json"
+            find "{{ bugs_output_dir }}/$dbms" -maxdepth 1 -name "*.json" -type f -print0 | \
+                just -f {{ bugs_dir }}/bugs.just classify_bugs > "$outfile"
         done
 
         END=$(date +%s)
