@@ -14,7 +14,7 @@ def main():
 
     # Load keyword matches
     keyword_matches = set()
-    matches_file = f"dataset/matches_{dbms}.json"
+    matches_file = f"memsafedb_bugs/bug_results/matches_{dbms}.json"
     if os.path.exists(matches_file):
         try:
             with open(matches_file, 'r') as f:
@@ -33,7 +33,7 @@ def main():
     rep_sets = []
     
     for rep in range(1, 4):
-        filename = f"dataset/{dbms}_rep{rep}.json" 
+        filename = f"memsafedb_bugs/bug_results/{dbms}_rep{rep}.json" 
         current_rep_mem_safety = set()
         current_rep_stats = defaultdict(int)
         
@@ -251,7 +251,7 @@ def main():
                 chunk_lines.append("")
             chunk_lines.append("\n")
         
-        out_name = f"dataset/report_{dbms}_part{i+1}.txt"
+        out_name = f"memsafedb_bugs/bug_results/report_{dbms}_part{i+1}.txt"
         with open(out_name, "w") as f:
             f.write("\n".join(chunk_lines))
         print(f"Wrote {len(chunk_bugs)} bugs to {out_name}")
