@@ -55,7 +55,7 @@ def extract_cve_list(zip_path: Path, output_dir: Path, force: bool = False) -> P
 
 def search_cves_for_database(cve_dir: Path, database: str, output_dir: Path) -> list:
     """
-    Search for CVEs mentioning a specific database.
+    Search for CVEs mentioning a specific database in product or packageName.
     Case-insensitive search.
     """
     cves_path = cve_dir / "cves"
@@ -64,17 +64,37 @@ def search_cves_for_database(cve_dir: Path, database: str, output_dir: Path) -> 
         return []
     
     matches = []
-    pattern = re.compile(database, re.IGNORECASE)
+    pattern = re.compile(re.escape(database), re.IGNORECASE)
     
     # Walk through all JSON files in the cves directory
+    # Note: parsing all JSONs might be slower but is more accurate
     for json_file in cves_path.rglob("*.json"):
         try:
-            content = json_file.read_text(encoding='utf-8', errors='ignore')
-            if pattern.search(content):
+            with open(json_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            found = False
+            # Check containers.cna.affected
+            cna = data.get('containers', {}).get('cna', {})
+            affected_items = cna.get('affected', [])
+            
+            for item in affected_items:
+                product = item.get('product', '')
+                package_name = item.get('packageName', '')
+                
+                if (product and pattern.search(str(product))) or (package_name and pattern.search(str(package_name))):
+                    found = True
+                    break
+            
+            if found:
                 # Store relative path from output_dir
-                rel_path = json_file.relative_to(output_dir)
-                matches.append(str(rel_path))
-        except Exception as e:
+                try:
+                    rel_path = json_file.relative_to(output_dir)
+                    matches.append(str(rel_path))
+                except ValueError:
+                    matches.append(str(json_file))
+                    
+        except Exception:
             continue
     
     return matches
@@ -92,7 +112,7 @@ def save_cve_list(matches: list, database: str, output_dir: Path) -> Path:
     return output_file
 
 
-def scrape_cves(output_dir: Path, databases: list = None, force: bool = False):
+def scrape_cves(output_dir: Path, databases: list = None, force: bool = False, skip_download: bool = False):
     """Main function to scrape CVEs for all databases."""
     if databases is None:
         databases = DATABASES
@@ -100,9 +120,16 @@ def scrape_cves(output_dir: Path, databases: list = None, force: bool = False):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Download and extract
-    zip_path = download_cve_list(output_dir, force)
-    cve_dir = extract_cve_list(zip_path, output_dir, force)
+    if skip_download:
+        cve_dir = output_dir / UNZIP_DIR
+        if not cve_dir.exists():
+            print(f"[ERROR] --skip-download specified but {cve_dir} does not exist.")
+            sys.exit(1)
+        print(f"[INFO] Skipping download. Using existing CVE data in {cve_dir}")
+    else:
+        # Download and extract
+        zip_path = download_cve_list(output_dir, force)
+        cve_dir = extract_cve_list(zip_path, output_dir, force)
     
     print(f"\n[INFO] Searching for CVEs for {len(databases)} databases...")
     
@@ -136,13 +163,19 @@ def main():
         action='store_true',
         help='Force re-download and re-extract even if files exist'
     )
+    parser.add_argument(
+        '--skip-download', '-s',
+        action='store_true',
+        help='Skip download and extraction, only perform filtering'
+    )
     
     args = parser.parse_args()
     
     scrape_cves(
         output_dir=Path(args.output),
         databases=args.databases,
-        force=args.force
+        force=args.force,
+        skip_download=args.skip_download
     )
 
 

@@ -1,7 +1,11 @@
 bugs_dir := source_dir()
-bugs_output_dir := "/scratch/$USER/memsafedb/bug_study/memsafedb_bugs/"
-cve_dir := "/scratch/$USER/memsafedb/bug_study/cve/"
+bugs_output_dir := "/scratch/dimitrios/memsafedb/bug_study/memsafedb_bugs/"
+cve_dir := "/scratch/dimitrios/memsafedb/bug_study/cve/"
 dockerfile_path := bugs_dir + "/Dockerfile"
+
+# Global date filtering
+start_date_setting := "2015-01-01"
+end_date_setting := "2025-12-31"
 
 # Memory safety keywords
 keywords := "buffer overflow|buffer-overflow|bufferoverflow|buffer overrun|buffer-overrun|buffer underflow|buffer-underflow|buffer underrun|\
@@ -26,7 +30,7 @@ default:
 # ========================================
 
 # Model configuration (Options: gpt-oss, llama4, llama3)
-models_dir := "/scratch/$USER/memsafedb/models"
+models_dir := "/scratch/dimitrios/memsafedb/models"
 model_type := "gpt-oss"
 
 model_repo := if model_type == "gpt-oss" {
@@ -113,7 +117,8 @@ classify_bugs +files="":
     import os
     import re
     import concurrent.futures
-    
+    from datetime import datetime, timezone
+
     # Read files from arguments if provided, otherwise from stdin
     args_files = "{{ files }}".strip()
     if args_files:
@@ -122,6 +127,11 @@ classify_bugs +files="":
         # Read from stdin (null-separated from xargs -0)
         files = sys.stdin.read().strip('\0').split('\0')
         files = [f for f in files if f]  # Remove empty strings
+
+    start_date_str = "{{ start_date_setting }}"
+    end_date_str = "{{ end_date_setting }}"
+    start_date = datetime.fromisoformat(start_date_str).replace(tzinfo=timezone.utc) if start_date_str else None
+    end_date = datetime.fromisoformat(end_date_str).replace(tzinfo=timezone.utc) if end_date_str else None
 
     API_URL = "http://localhost:8080/v1/chat/completions"
     MODEL = "{{ model_name }}"
@@ -132,6 +142,26 @@ classify_bugs +files="":
         try:
             with open(bug_file, 'r') as f:
                 data = json.load(f)
+            
+            # Date filtering
+            created_at_str = data.get('created_at') or data.get('raw', {}).get('created_at')
+            if created_at_str:
+                try:
+                    # Simplify: Assume UTC
+                    created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+                    if created_at.tzinfo is None:
+                         created_at = created_at.replace(tzinfo=timezone.utc)
+                    else:
+                         created_at = created_at.astimezone(timezone.utc)
+
+                    if start_date and created_at < start_date:
+                        return None
+                    if end_date and created_at > end_date:
+                        return None
+
+                except ValueError:
+                    pass
+
             title = data.get('title', '')
             desc = data.get('body', '')
 
@@ -284,7 +314,7 @@ search_cves dbms="":
         fi
     done < "$cve_list"
 
-classify_cves +files:
+classify_cves +files="":
     #!/usr/bin/env python3
     import sys
     import json
@@ -292,7 +322,14 @@ classify_cves +files:
     import os
     import concurrent.futures
     from tqdm import tqdm
+    from datetime import datetime, timezone
+
     files = "{{ files }}".split()
+
+    start_date_str = "{{ start_date_setting }}"
+    end_date_str = "{{ end_date_setting }}"
+    start_date = datetime.fromisoformat(start_date_str).replace(tzinfo=timezone.utc) if start_date_str else None
+    end_date = datetime.fromisoformat(end_date_str).replace(tzinfo=timezone.utc) if end_date_str else None
 
     API_URL = "http://localhost:8080/v1/chat/completions"
     MODEL = "{{ model_name }}"
@@ -335,6 +372,26 @@ classify_cves +files:
         try:
             with open(cve_file, 'r') as f:
                 data = json.load(f)
+
+            # Date filtering
+            cve_meta = data.get('cveMetadata', {})
+            date_published = cve_meta.get('datePublished')
+            if date_published:
+                try:
+                    # Simplify: Assume UTC
+                    cve_date = datetime.fromisoformat(date_published.replace('Z', '+00:00'))
+                    if cve_date.tzinfo is None:
+                        cve_date = cve_date.replace(tzinfo=timezone.utc)
+                    else:
+                        cve_date = cve_date.astimezone(timezone.utc)
+                    
+                    if start_date and cve_date < start_date:
+                        return None
+                    if end_date and cve_date > end_date:
+                        return None
+
+                except ValueError:
+                    pass
 
             # Extract CVE ID from cveMetadata
             cve_id = data.get('cveMetadata', {}).get('cveId', 'Unknown')
