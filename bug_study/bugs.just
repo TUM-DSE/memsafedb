@@ -135,6 +135,12 @@ classify_bugs +files="":
             title = data.get('title', '')
             desc = data.get('body', '')
 
+            # Truncate long descriptions to prevent payload size issues
+            # MAX_DESC_LENGTH = 8000
+            # if len(desc) > MAX_DESC_LENGTH:
+            #     desc = desc[:MAX_DESC_LENGTH] + "\n... [TRUNCATED - description too long]"
+            #     print(f"Warning: Truncated description for {bug_file} (original length: {len(data.get('body', ''))} chars)", file=sys.stderr, flush=True)
+
             json_template = '{ "issue_type": "bug/programmer_error/other", "is_memory_safety": true/false, "confidence": "high/medium/low", "reason": "Brief explanation..." }'
             user_prompt = f"""Analyze the following bug report.
             First, classify the issue into one of the following types:
@@ -163,6 +169,11 @@ classify_bugs +files="":
                 "max_tokens": 1024
             }
 
+            # Validate payload size before sending
+            payload_size = len(json.dumps(payload))
+            if payload_size > 100000:  # 100KB limit
+                print(f"Warning: Large payload ({payload_size} bytes) for {bug_file}", file=sys.stderr, flush=True)
+
             response = requests.post(API_URL, json=payload)
             response.raise_for_status()
             result = response.json()
@@ -184,6 +195,12 @@ classify_bugs +files="":
 
             return output
 
+        # Error handling with HTTP response details
+        except requests.exceptions.HTTPError as e:
+            print(f"HTTP Error processing {bug_file}: {e}", file=sys.stderr, flush=True)
+            if hasattr(e, 'response') and hasattr(e.response, 'text'):
+                print(f"Response: {e.response.text}", file=sys.stderr, flush=True)
+            return None
         except Exception as e:
             print(f"Error processing {bug_file}: {e}", file=sys.stderr, flush=True)
             return None
@@ -205,7 +222,7 @@ run_all_bugs:
     set -e
     mkdir -p {{ bugs_output_dir }}/bug_results
 
-    for dbms in "DuckDB" "Redis" "RocksDB" "MongoDB" "ClickHouse" "CockroachDB" "MariaDB" "MySQL" "LevelDB"; do
+    for dbms in "RocksDB" "MongoDB" "ClickHouse" "CockroachDB" "MariaDB" "MySQL" "Redis"  "LevelDB"; do
         START=$(date +%s)
         echo "--------------------------------------------------"
         echo "Processing $dbms"
