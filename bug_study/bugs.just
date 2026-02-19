@@ -166,10 +166,9 @@ classify_bugs +files="":
             desc = data.get('body', '')
 
             # Truncate long descriptions to prevent payload size issues
-            # MAX_DESC_LENGTH = 8000
-            # if len(desc) > MAX_DESC_LENGTH:
-            #     desc = desc[:MAX_DESC_LENGTH] + "\n... [TRUNCATED - description too long]"
-            #     print(f"Warning: Truncated description for {bug_file} (original length: {len(data.get('body', ''))} chars)", file=sys.stderr, flush=True)
+            MAX_DESC_LENGTH = 12000
+            if len(desc) > MAX_DESC_LENGTH:
+                desc = desc[:MAX_DESC_LENGTH] + "\n... [TRUNCATED - description too long]"
 
             json_template = '{ "issue_type": "bug/programmer_error/other", "is_memory_safety": true/false, "confidence": "high/medium/low", "reason": "Brief explanation..." }'
             user_prompt = f"""Analyze the following bug report.
@@ -403,6 +402,11 @@ classify_cves +files="":
             # Extract description from containers.cna.descriptions
             descriptions = cna.get('descriptions', [])
             desc = descriptions[0].get('value', '') if descriptions else ''
+
+            # Truncate long descriptions
+            MAX_DESC_LENGTH = 12000
+            if len(desc) > MAX_DESC_LENGTH:
+                desc = desc[:MAX_DESC_LENGTH] + "\n... [TRUNCATED - description too long]"
 
             if not desc:
                 return None
