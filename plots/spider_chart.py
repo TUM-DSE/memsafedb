@@ -88,11 +88,11 @@ def plot_spider_chart():
     # Placeholder Annotations with marker points
     # MTE
     fig.text(0.09, 0.72, "MTE:\nGood performance (5-10\\%)\nMinimal changes\nProbabilistic safety", fontsize=FONTSIZE_ANNOTATION+2, ha='left', va='center', color='black')
-    fig.add_artist(Line2D([0.075], [0.77], transform=fig.transFigure, figure=fig, marker='h', markersize=5, color=MTE_COLOR, linestyle='None'))
+    fig.add_artist(Line2D([0.075], [0.77], transform=fig.transFigure, figure=fig, marker='h', markersize=5, color=BASELINE_MTE_COLOR, linestyle='None'))
     
     # CHERI
     fig.text(0.7, 0.72, "CHERI:\nAverage performance (20-60\\%)\nDifficult to port\nExcellent safety", fontsize=FONTSIZE_ANNOTATION+2, ha='left', va='center', color='black')
-    fig.add_artist(Line2D([0.685], [0.77], transform=fig.transFigure, figure=fig, marker='*', markersize=5, color=CHERI_COLOR, linestyle='None'))
+    fig.add_artist(Line2D([0.685], [0.77], transform=fig.transFigure, figure=fig, marker='*', markersize=5, color=BASELINE_CHERI_COLOR, linestyle='None'))
     
     # ASan
     fig.text(0.15, 0.15, "Software-based (e.g. ASan):\nNot for production\nSimple flag\nOnly for debugging", fontsize=FONTSIZE_ANNOTATION+2, ha='left', va='center', color='black')

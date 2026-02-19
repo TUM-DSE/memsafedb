@@ -584,12 +584,12 @@ def plot_all_systems(df: pd.DataFrame):
 
     # Captions
     captions = [
-        (ax_redis, "(a) Redis."),
-        (ax_level, "(b) LevelDB."),
-        (ax_mysql, "(c) MySQL."),
-        (ax_sqlite, "(d) SQLite."),
-        (ax_duck, "(e) DuckDB."),
-        (ax_lady, "(f) LadyBugDB."),
+        (ax_redis, r"\textbf{(a) Redis.}"),
+        (ax_level, r"\textbf{(b) LevelDB.}"),
+        (ax_mysql, r"\textbf{(c) MySQL.}"),
+        (ax_sqlite, r"\textbf{(d) SQLite.}"),
+        (ax_duck, r"\textbf{(e) DuckDB.}"),
+        (ax_lady, r"\textbf{(f) LadyBugDB.}"),
     ]
     
     for ax, txt in captions:
