@@ -441,7 +441,13 @@ classify_cves +files="":
             affected = extract_affected(data)
             affected_str = ', '.join(affected) if affected else 'Not specified'
 
-            json_template = '{ "issue_type": "bug/programmer_error/other", "is_memory_safety": true/false, "confidence": "high/medium/low", "reason": "Brief explanation..." }'
+            json_template = '''{
+            "issue_type": "bug/programmer_error/other",
+            "is_memory_safety": true/false,
+            "implication": "data_loss/data_corruption/incorrect_query_results/system_crash/resource_exhaustion/concurrency_hazard/transaction_violation/durability_violation/replication_inconsistency/denial_of_service/none",
+            "confidence": "high/medium/low",
+            "reason": "Brief explanation..."
+            }'''
 
             # Build prompt with all available info
             prompt_parts = [
@@ -451,9 +457,8 @@ classify_cves +files="":
                 '2. "programmer_error": Problems on the side of the programmer (misuse).',
                 '3. "other": Issues outside the database system, requests, or other misc issues (feature requests, questions, etc.).',
                 "",
-                "MEMORY SAFETY DETERMINATION:",
-                'IF issue_type is "bug", determine if it is a memory safety issue.',
-                'IF issue_type is NOT "bug", set is_memory_safety to false.',
+                "Second, IF the issue is a \"bug\", determine if it describes a **Memory Safety Issue**.",
+                "If it is not a \"bug\", \"is_memory_safety\" must be false.",
                 "",
                 "Memory safety issues INCLUDE:",
                 "- Buffer overflow, heap overflow, stack overflow",
@@ -469,6 +474,21 @@ classify_cves +files="":
                 "- Denial of service through resource exhaustion (unless memory corruption)",
                 "- Logic errors, race conditions (unless causing memory corruption)",
                 "",
+                "Third, IF the issue is a \"bug\" AND you can determine the primary operational implication",
+                "with HIGH confidence, classify it into exactly one of the following:",
+                '- "data_loss": Data is permanently lost or unrecoverable.',
+                '- "data_corruption": Stored data becomes physically or logically inconsistent.',
+                '- "incorrect_query_results": Queries silently return wrong data (no crash).',
+                '- "system_crash": The database process crashes, aborts, or panics.',
+                '- "resource_exhaustion": Memory leak, disk/CPU saturation, connection pool depletion.',
+                '- "concurrency_hazard": Deadlocks, race conditions, or isolation violations under concurrency.',
+                '- "transaction_violation": ACID guarantees are broken (lost updates, dirty reads, etc.).',
+                '- "durability_violation": Committed transactions are lost after a crash or restart.',
+                '- "replication_inconsistency": Primary and replica data diverge or replication fails.',
+                '- "denial_of_service": Server becomes unresponsive or hangs without crashing.',
+                '- "none": No clear operational implication can be determined with high confidence,',
+                '        or the issue is not a "bug".',
+                "",
                 "CVE REPORT:",
                 f"CVE ID: {cve_id}",
             ]
@@ -482,7 +502,7 @@ classify_cves +files="":
             prompt_parts.extend([
                 "",
                 "TASK:",
-                "Classify this CVE. Respond ONLY with valid JSON:",
+                "Classify this CVE. Answer with JSON format:",
                 json_template,
                 "Only provide the JSON."
             ])
