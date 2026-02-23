@@ -170,7 +170,14 @@ classify_bugs +files="":
             if len(desc) > MAX_DESC_LENGTH:
                 desc = desc[:MAX_DESC_LENGTH] + "\n... [TRUNCATED - description too long]"
 
-            json_template = '{ "issue_type": "bug/programmer_error/other", "is_memory_safety": true/false, "confidence": "high/medium/low", "reason": "Brief explanation..." }'
+            json_template = '''{
+            "issue_type": "bug/programmer_error/other",
+            "is_memory_safety": true/false,
+            "implication": "data_loss/data_corruption/incorrect_query_results/system_crash/resource_exhaustion/concurrency_hazard/transaction_violation/durability_violation/replication_inconsistency/denial_of_service/none",
+            "confidence": "high/medium/low",
+            "reason": "Brief explanation..."
+            }'''
+
             user_prompt = f"""Analyze the following bug report.
             First, classify the issue into one of the following types:
             1. "bug": Actual bugs (flaws in the system implementation).
@@ -179,6 +186,21 @@ classify_bugs +files="":
 
             Second, IF the issue is a "bug", determine if it describes a **Memory Safety Issue**.
             If it is not a "bug", "is_memory_safety" must be false.
+
+            Third, IF the issue is a "bug" AND you can determine the primary operational implication
+            with HIGH confidence, classify it into exactly one of the following:
+            - "data_loss": Data is permanently lost or unrecoverable.
+            - "data_corruption": Stored data becomes physically or logically inconsistent.
+            - "incorrect_query_results": Queries silently return wrong data (no crash).
+            - "system_crash": The database process crashes, aborts, or panics.
+            - "resource_exhaustion": Memory leak, disk/CPU saturation, connection pool depletion.
+            - "concurrency_hazard": Deadlocks, race conditions, or isolation violations under concurrency.
+            - "transaction_violation": ACID guarantees are broken (lost updates, dirty reads, etc.).
+            - "durability_violation": Committed transactions are lost after a crash or restart.
+            - "replication_inconsistency": Primary and replica data diverge or replication fails.
+            - "denial_of_service": Server becomes unresponsive or hangs without crashing.
+            - "none": No clear operational implication can be determined with high confidence,
+                    or the issue is not a "bug".
 
             Bug Report:
             Title: {title}
