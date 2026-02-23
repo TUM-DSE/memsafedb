@@ -67,8 +67,18 @@ def search_cves_for_database(cve_dir: Path, database: str, output_dir: Path) -> 
     pattern = re.compile(re.escape(database), re.IGNORECASE)
     
     # Walk through all JSON files in the cves directory
-    # Note: parsing all JSONs might be slower but is more accurate
     for json_file in cves_path.rglob("*.json"):
+        # Filter by year: only 2015 and later
+        # CVE-YYYY-NNNN.json format
+        filename = json_file.name
+        if filename.startswith("CVE-"):
+            try:
+                year_part = filename.split('-')[1]
+                if int(year_part) < 2015:
+                    continue
+            except (IndexError, ValueError):
+                continue
+
         try:
             with open(json_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
@@ -79,10 +89,11 @@ def search_cves_for_database(cve_dir: Path, database: str, output_dir: Path) -> 
             affected_items = cna.get('affected', [])
             
             for item in affected_items:
-                product = item.get('product', '')
-                package_name = item.get('packageName', '')
+                product = str(item.get('product', '')).lower()
+                package_name = str(item.get('packageName', '')).lower()
                 
-                if (product and pattern.search(str(product))) or (package_name and pattern.search(str(package_name))):
+                # Using lower() for case-insensitive search as per user preference
+                if (database.lower() in product) or (database.lower() in package_name):
                     found = True
                     break
             
