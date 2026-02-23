@@ -101,8 +101,9 @@ kill_server:
 scrape_bugs:
     #!/usr/bin/env bash
     mkdir -p {{ bugs_output_dir }}
-    rm -rf {{ bugs_output_dir }}/*
-    python3 scrape_bugs.py --output "{{ bugs_output_dir }}"
+    python3 scrape_bugs.py --output "{{ bugs_output_dir }}" \
+        --start-date "{{ start_date_setting }}" \
+        --end-date "{{ end_date_setting }}"
 
 search_bugs dbms="":
     #!/usr/bin/env bash
@@ -317,6 +318,7 @@ analyse_bug_results dbms="LevelDB":
 
 scrape_cves:
     #!/usr/bin/env bash
+    mkdir -p {{ cve_dir }}
     python3 {{ bugs_dir }}/scrape_cves.py --output "{{ cve_dir }}"
 
 search_cves dbms="":
