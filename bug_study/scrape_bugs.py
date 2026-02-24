@@ -169,7 +169,7 @@ class GitHubScraper(BugScraper):
                 else:
                     break
                 
-                time.sleep(1)
+                time.sleep(0.5)
                 
             except Exception as e:
                 print(f"Error fetching page {params['page']}: {e}")
@@ -260,7 +260,7 @@ class JiraScraper(BugScraper):
                 if start_at >= total:
                     break
                     
-                time.sleep(1)
+                time.sleep(0.5)
                 
             except Exception as e:
                 print(f"Error fetching Jira issues: {e}")
@@ -291,7 +291,6 @@ class MySQLScraper(BugScraper):
             'bug_age': str(bug_age),
             'last_updated': 0,
             'order_by': 'id',
-            'limit': 50,
             'mine': 0,
             'begin': 0,
         }
@@ -332,14 +331,19 @@ class MySQLScraper(BugScraper):
                     if not result:
                         print(f"  [Dry Run] Reached limit of 50 bugs.")
                         return
-                    time.sleep(0.25)
+                    time.sleep(0.5)
 
-                # Paginate: if we got fewer rows than the limit, we're done
-                if len(rows) < params['limit']:
+                # Advance by the actual number of rows the server returned
+                if not rows:
                     break
-                params['begin'] += params['limit']
-                time.sleep(0.5)
+                params['begin'] += len(rows)
+                time.sleep(1)
 
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code == 403:
+                print(f"  [{self.name}] Rate-limited by MySQL server (403). Stopping CSV index fetch.")
+            else:
+                print(f"Error fetching MySQL CSV index: {e}")
         except Exception as e:
             print(f"Error fetching MySQL CSV index: {e}")
 
@@ -423,7 +427,7 @@ class SQLiteScraper(BugScraper):
                         if not self.fetch_ticket(uuid):
                             print(f"  [Dry Run] Reached limit of 50 bugs.")
                             return
-                        time.sleep(1)
+                        time.sleep(0.5)
         except Exception as e:
             print(f"Error scraping SQLite: {e}")
 
