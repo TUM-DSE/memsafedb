@@ -173,7 +173,10 @@ def analyze_dbms_by_year(dbms):
         'keyword_memsafe': set()
     })
 
-    db_total = 0
+    # Count total from source directory (all scraped issues)
+    source_dir = os.path.join(BUGS_DIR, dbms)
+    db_total = sum(1 for f in os.listdir(source_dir) if f.endswith('.json')) \
+               if os.path.isdir(source_dir) else 0
     db_memsafe = 0
     db_implications_unanimous = Counter()
 
@@ -201,9 +204,8 @@ def analyze_dbms_by_year(dbms):
                 if implication:
                     implication_votes[implication] += 1
 
-        # All 3 reps agree it's a bug
+        # All 3 reps agree it's a bug — count for CSV yearly stats
         if bug_count == 3:
-            db_total += 1
             if year is not None:
                 yearly_stats[year]['total_bugs'].add(bug_path)
 
