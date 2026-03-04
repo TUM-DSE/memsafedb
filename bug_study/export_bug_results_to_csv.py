@@ -152,103 +152,202 @@ def load_llm_results(dbms):
 def analyze_dbms_by_year(dbms):
     """
     Analyze bug results for a database, grouped by year.
-    
+
     Returns:
-        dict: {year: {'total': int, 'llm_memsafe': int, 'keyword_memsafe': int}}
+        tuple: (
+            yearly: {year: {'total': int, 'llm_memsafe': int, 'keyword_memsafe': int}},
+            db_summary: {'total': int, 'llm_memsafe': int, 'implications': Counter}
+        )
     """
     print(f"Analyzing {dbms}...", file=sys.stderr)
-    
+
+    from collections import Counter
+
     keyword_matches = load_keyword_matches(dbms)
     llm_results = load_llm_results(dbms)
-    
+
     # Group by year
     yearly_stats = defaultdict(lambda: {
-        'total_bugs': set(),  # Use sets to avoid duplicates
+        'total_bugs': set(),
         'llm_memsafe': set(),
         'keyword_memsafe': set()
     })
-    
-    # Process all bugs that appear in any of the 3 reps
+
+    db_total = 0
+    db_memsafe = 0
+    db_implications_unanimous = Counter()
+
     all_bugs = set(llm_results.keys())
-    
+
     for bug_path in all_bugs:
         year = extract_year_from_bug(bug_path)
-        if year is None:
-            continue
-        
-        # Count as total bug only if ALL 3 reps classified it as 'bug'
         reps = llm_results[bug_path]
         bug_count = 0
         memsafe_count = 0
-        
+        implication_votes = Counter()
+
         for rep_num in [1, 2, 3]:
             rep_key = f"rep{rep_num}"
             if rep_key in reps:
                 classification = reps[rep_key]
                 issue_type = classification.get('issue_type', '')
                 is_memsafe = classification.get('is_memory_safety', False)
-                
+                implication = classification.get('implication', 'none')
+
                 if issue_type == 'bug':
                     bug_count += 1
                     if is_memsafe:
                         memsafe_count += 1
-        
-        # If ALL 3 reps classified it as a bug, count it
+                if implication:
+                    implication_votes[implication] += 1
+
+        # All 3 reps agree it's a bug
         if bug_count == 3:
-            yearly_stats[year]['total_bugs'].add(bug_path)
-        
-        # If ALL 3 reps classified it as memory safety bug, count it
+            db_total += 1
+            if year is not None:
+                yearly_stats[year]['total_bugs'].add(bug_path)
+
+        # All 3 reps agree it's a memory safety bug
         if memsafe_count == 3:
-            yearly_stats[year]['llm_memsafe'].add(bug_path)
-    
+            db_memsafe += 1
+            if year is not None:
+                yearly_stats[year]['llm_memsafe'].add(bug_path)
+            # Unanimous implication — only for memory safety bugs
+            if implication_votes:
+                top_implication, top_count = implication_votes.most_common(1)[0]
+                if top_count == 3:
+                    db_implications_unanimous[top_implication] += 1
+
     # Process keyword matches
     for bug_path in keyword_matches:
         year = extract_year_from_bug(bug_path)
         if year is None:
             continue
         yearly_stats[year]['keyword_memsafe'].add(bug_path)
-    
+
     # Convert sets to counts
-    result = {}
+    yearly_result = {}
     for year, stats in yearly_stats.items():
-        result[year] = {
+        yearly_result[year] = {
             'total': len(stats['total_bugs']),
             'llm_memsafe': len(stats['llm_memsafe']),
             'keyword_memsafe': len(stats['keyword_memsafe'])
         }
-    
-    return result
+
+    db_summary = {
+        'total': db_total,
+        'llm_memsafe': db_memsafe,
+        'implications_unanimous': db_implications_unanimous,
+    }
+
+    return yearly_result, db_summary
+
+
+IMPLICATION_CATEGORIES = [
+    'data_loss', 'data_corruption', 'incorrect_query_results', 'system_crash',
+    'resource_exhaustion', 'concurrency_hazard', 'transaction_violation',
+    'durability_violation', 'replication_inconsistency', 'denial_of_service', 'none'
+]
+
+
+def print_summary_tables(all_db_summaries):
+    """Print two summary tables to stdout."""
+
+    # ── Table 1: per-DB totals ──────────────────────────────────────────────
+    print()
+    print("=" * 60)
+    print("TABLE 1: Bug Totals per Database (all 3 LLM reps agree)")
+    print("=" * 60)
+    header = f"{'Database':<16} {'Total Bugs':>12} {'Mem Safety':>12} {'Mem% of Bugs':>14}"
+    print(header)
+    print("-" * 60)
+    grand_total = grand_memsafe = 0
+    for dbms, summary in all_db_summaries:
+        total = summary['total']
+        memsafe = summary['llm_memsafe']
+        pct = (memsafe / total * 100) if total > 0 else 0.0
+        grand_total += total
+        grand_memsafe += memsafe
+        print(f"{dbms:<16} {total:>12} {memsafe:>12} {pct:>13.1f}%")
+    print("-" * 60)
+    grand_pct = (grand_memsafe / grand_total * 100) if grand_total > 0 else 0.0
+    print(f"{'TOTAL':<16} {grand_total:>12} {grand_memsafe:>12} {grand_pct:>13.1f}%")
+    print()
+
+    # ── Table 2: implication breakdown for memory safety bugs (unanimous) ────
+    # Only show categories that appear at least once
+    active_cats = [c for c in IMPLICATION_CATEGORIES
+                   if any(s['implications_unanimous'].get(c, 0) > 0 for _, s in all_db_summaries)]
+
+    col_w = 10  # width per category column
+    db_col = 16
+
+    abbrev = {
+        'data_loss': 'DataLoss',
+        'data_corruption': 'DataCorr',
+        'incorrect_query_results': 'WrongQry',
+        'system_crash': 'Crash',
+        'resource_exhaustion': 'ResExhst',
+        'concurrency_hazard': 'Concur',
+        'transaction_violation': 'TxnViol',
+        'durability_violation': 'DurViol',
+        'replication_inconsistency': 'ReplIncn',
+        'denial_of_service': 'DoS',
+        'none': 'None',
+    }
+
+    def print_implication_table(title, key):
+        print("=" * (db_col + col_w * len(active_cats)))
+        print(title)
+        print("=" * (db_col + col_w * len(active_cats)))
+        hdr_cats = ''.join(abbrev.get(c, c)[:col_w].rjust(col_w) for c in active_cats)
+        print(f"{'Database':<{db_col}}{hdr_cats}")
+        print("-" * (db_col + col_w * len(active_cats)))
+        for dbms, summary in all_db_summaries:
+            impl = summary[key]
+            row = ''.join(str(impl.get(c, 0)).rjust(col_w) for c in active_cats)
+            print(f"{dbms:<{db_col}}{row}")
+        print()
+
+    print_implication_table(
+        "TABLE 2: Implication Breakdown — Memory Safety Bugs, Unanimous (all 3 reps agree)",
+        'implications_unanimous'
+    )
 
 
 def export_to_csv(output_file="bug_results_by_year.csv"):
-    """Export all database bug results to CSV."""
+    """Export all database bug results to CSV and print summary tables."""
     all_rows = []
-    
+    all_db_summaries = []
+
     for dbms in DATABASES:
-        yearly_stats = analyze_dbms_by_year(dbms)
-        
+        yearly_stats, db_summary = analyze_dbms_by_year(dbms)
+        all_db_summaries.append((dbms, db_summary))
+
         for year, stats in sorted(yearly_stats.items()):
             all_rows.append({
-                'db': dbms.lower(),  # Lowercase to match CVE format
+                'db': dbms.lower(),
                 'year': year,
                 'total_bugs': stats['total'],
                 'memory_safety_bugs_llms': stats['llm_memsafe'],
                 'memory_safety_bugs_keywords': stats['keyword_memsafe']
             })
-    
+
     # Write to CSV
     output_path = os.path.join(BUGS_DIR, output_file)
     with open(output_path, 'w', newline='') as csvfile:
         fieldnames = ['db', 'year', 'total_bugs', 'memory_safety_bugs_llms', 'memory_safety_bugs_keywords']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        
         writer.writeheader()
         for row in all_rows:
             writer.writerow(row)
-    
+
     print(f"CSV exported to: {output_path}")
     print(f"Total rows: {len(all_rows)}")
-    
+
+    # Print summary tables
+    print_summary_tables(all_db_summaries)
+
     return output_path
 
 
@@ -257,7 +356,7 @@ def main():
         output_file = sys.argv[1]
     else:
         output_file = "bug_results_by_year.csv"
-    
+
     export_to_csv(output_file)
 
 
