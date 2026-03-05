@@ -1,5 +1,5 @@
-# Base image with CUDA 12.8 and cuDNN for Ubuntu 24.04
-FROM nvidia/cuda:12.8.0-cudnn-devel-ubuntu24.04
+# Base image with CUDA 13.0 and cuDNN for Ubuntu 24.04
+FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu24.04
 
 # Set non-interactive frontend to avoid apt prompts
 ENV DEBIAN_FRONTEND=noninteractive
@@ -27,7 +27,7 @@ RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/lib
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64/stubs:${LD_LIBRARY_PATH}
 
 # Configure the build with CUDA support
-RUN cmake -B build -DGGML_CUDA=ON
+RUN cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=90
 
 # Build the project
 RUN cmake --build build --config Release -j $(nproc)
@@ -47,6 +47,5 @@ RUN mkdir /models
 ENTRYPOINT ["./build/bin/llama-server"]
 
 # Default command:
-# 1. Points to the mounted path inside the container (/models/...)
-# 2. Sets host to 0.0.0.0 so you can access it from outside
-CMD ["-m", "/models/Meta-Llama-3.1-8B-Instruct-Q8_0.gguf", "--host", "0.0.0.0", "--port", "8080", "-np", "8", "-cb"]
+# Overridden by just launch_server recipe in bugs.just
+CMD ["--help"]
