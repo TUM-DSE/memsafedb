@@ -75,11 +75,12 @@ def prep_generic_data(data):
     return pivot, pivot_std, variants_to_plot, baseline_map
 
 
-def plot_bars_on_ax(ax, pivot, pivot_std, variants_to_plot, baseline_map, y_label, show_x_labels=True, higher_better=True, show_indicator=True):
+def plot_bars_on_ax(ax, pivot, pivot_std, variants_to_plot, baseline_map, y_label, show_x_labels=True, higher_better=True, show_indicator=True, bar_width_scale=1.0):
     """Refactored helper: Plot bars on given axis."""
     x = np.arange(len(pivot))
-    total_width = 0.8
+    total_width = 0.8 * bar_width_scale
     width = total_width / len(variants_to_plot)
+    print(total_width, width)
     
     order_priority = ['release-dynamic', 'release', 'release-mte', 'release-asan', 'release-static', 'release-cheri']
     variants_to_plot = sorted(variants_to_plot, key=lambda v: order_priority.index(v) if v in order_priority else 999)
@@ -187,107 +188,6 @@ def plot_bars_on_ax(ax, pivot, pivot_std, variants_to_plot, baseline_map, y_labe
     ymax = pivot.max().max()
     ax.set_ylim(0, ymax * 1.5)
 
-def plot_generic_benchmark(
-    data: pd.DataFrame,
-    output_filename: str,
-    y_label: str = "Metric",
-    higher_better=True,
-    fig_width=figwidth_full,
-    show_x_labels=True,
-    show_legend=True
-):
-    """Generic function to plot baseline vs MTE and baseline vs CHERI with relative performance."""
-    
-    if data.empty:
-        print(f"No data for {output_filename}")
-        return
-
-
-    pivot, pivot_std, variants_to_plot, baseline_map = prep_generic_data(data)
-    
-    if pivot is None:
-        print(f"No valid variant pairs found for {output_filename}")
-        return
-
-    # Plot setup
-    figsize = (fig_width, fig_height)
-    fig, ax = plt.subplots(figsize=figsize)
-    
-    plot_bars_on_ax(ax, pivot, pivot_std, variants_to_plot, baseline_map, y_label, show_x_labels, higher_better)
-    
-    if show_legend:
-        handles, labels = ax.get_legend_handles_labels()
-        by_label = dict(zip(labels, handles))
-        
-        if fig_width <= figwidth_half:
-            legend_ncol = len(variants_to_plot)
-                
-            ax.legend(
-                by_label.values(), 
-                by_label.keys(), 
-                fontsize=FONTSIZE_LEGEND, 
-                loc='lower center', 
-                bbox_to_anchor=(0.5, 1.02), 
-                ncol=legend_ncol,
-                borderaxespad=0.,
-                columnspacing=0.5,
-                handletextpad=0.5,
-                labelspacing=0.5,
-            )
-        else:
-            legend_ncol = len(variants_to_plot)
-            ax.legend(
-                by_label.values(), 
-                by_label.keys(), 
-                fontsize=FONTSIZE_LEGEND, 
-                loc='upper right', 
-                ncol=legend_ncol
-            )
-    
-    plt.tight_layout()
-    output_path = os.path.join(result_dir, output_filename)
-    plt.savefig(output_path, format='pdf', bbox_inches='tight')
-    plt.close()
-    print(f"Generated {output_filename}")
-
-def plot_combined_mysql_sqlite(mysql_data, sqlite_data, output_filename='dbms_mysql_sqlite.pdf'):
-    """Combine MySQL and SQLite into single plot."""
-    
-    p_mysql, ps_mysql, v_mysql, b_mysql = prep_generic_data(mysql_data)
-    p_sqlite, ps_sqlite, v_sqlite, b_sqlite = prep_generic_data(sqlite_data)
-    
-    if p_mysql is None or p_sqlite is None:
-        print("Missing data for combined plot")
-        return
-    
-    figsize = (figwidth_half, fig_height)
-    
-    fig, axes = plt.subplots(1, 2, figsize=figsize, sharey=False, gridspec_kw={'width_ratios': [1, 2]})
-    ax_mysql = axes[0]
-    ax_sqlite = axes[1]
-    plot_bars_on_ax(ax_mysql, p_mysql, ps_mysql, v_mysql, b_mysql, 'Throughput (TPS)', show_x_labels=False, higher_better=True, show_indicator=False)
-    plot_bars_on_ax(ax_sqlite, p_sqlite, ps_sqlite, v_sqlite, b_sqlite, '', show_x_labels=False, higher_better=True, show_indicator=False)
-    
-    handles, labels = ax_sqlite.get_legend_handles_labels()
-    by_label = dict(zip(labels, handles))
-    
-    fig.legend(
-        by_label.values(),
-        by_label.keys(),
-        loc='upper center',
-        bbox_to_anchor=(0.5, 1.1),
-        ncol=4,
-        fontsize=FONTSIZE_LEGEND
-    )
-
-    fig.text(0.5, 1.12, higher_better_str, ha='center', va='center', color='blue', fontsize=FONTSIZE_TITLE)
-    
-    plt.tight_layout()
-    output_path = os.path.join(result_dir, output_filename)
-    plt.savefig(output_path, format='pdf', bbox_inches='tight')
-    plt.close()
-    print(f"Generated {output_filename}")
-
 def calculate_overhead_distribution(df, baseline_var, variant_var, label=""):
     """Calculate overhead distribution (normalized runtime) for matched workloads."""
     
@@ -320,90 +220,6 @@ def calculate_overhead_distribution(df, baseline_var, variant_var, label=""):
         overheads.append((overhead, workload))
         
     return overheads
-
-def plot_combined_duckdb_ladybug(duckdb_warm, duckdb_cold, ladybug_data):
-    """Combined box plot for DuckDB and Ladybug Overheads."""
-    
-    duck_data_list = []
-    duck_stats_list = []
-    duck_labels = []
-    duck_colors = []
-    duck_hatches = []
-
-    cold_overheads = calculate_overhead_distribution(duckdb_cold, 'release-cold', 'release-mte-cold', label="DuckDB Cold")
-    if cold_overheads:
-        duck_data_list.append([x[0] for x in cold_overheads])
-        duck_stats_list.append(cold_overheads)
-        duck_labels.append("MTE Cold")
-        duck_colors.append(MTE_COLOR)
-        duck_hatches.append(MTE_HATCH)
-
-    warm_overheads = calculate_overhead_distribution(duckdb_warm, 'release', 'release-mte', label="DuckDB Warm")
-    if warm_overheads:
-        duck_data_list.append([x[0] for x in warm_overheads])
-        duck_stats_list.append(warm_overheads)
-        duck_labels.append("MTE Warm")
-        duck_colors.append(MTE_COLOR)
-        duck_hatches.append(MTE_HATCH)
-
-    lady_data_list = []
-    lady_stats_list = []
-    lady_labels = []
-    lady_colors = []
-    lady_hatches = []
-    
-    mte_overheads = calculate_overhead_distribution(ladybug_data, 'release-dynamic', 'release-mte', label="Ladybug MTE")
-    if mte_overheads:
-        lady_data_list.append([x[0] for x in mte_overheads])
-        lady_stats_list.append(mte_overheads)
-        lady_labels.append("MTE")
-        lady_colors.append(MTE_COLOR)
-        lady_hatches.append(MTE_HATCH)
-        
-    cheri_overheads = calculate_overhead_distribution(ladybug_data, 'release-static', 'release-cheri', label="Ladybug CHERI")
-    if cheri_overheads:
-        lady_data_list.append([x[0] for x in cheri_overheads])
-        lady_stats_list.append(cheri_overheads)
-        lady_labels.append("CHERI")
-        lady_colors.append(CHERI_COLOR)
-        lady_hatches.append(CHERI_HATCH)
-
-    if not duck_data_list and not lady_data_list:
-        print("No match pairs for combined box plot")
-        return
-
-    # --- Print Stats ---
-    def print_stats(data_list, labels, title):
-        print(f"\n=== {title} Statistics ===")
-        for data, label in zip(data_list, labels):
-            if not data: continue
-            
-            # data is list of (val, name)
-            vals = np.array([x[0] for x in data])
-            sorted_data = sorted(data, key=lambda x: x[0])
-            
-            print(f"-- {label} --")
-            print(f"  Mean (Arith): {np.mean(vals):.4f}")
-            print(f"  Min:          {np.min(vals):.4f}")
-            print(f"  Max:          {np.max(vals):.4f}")
-            
-            # Outliers
-            print(f"  Top 3 Lowest (Best):")
-            for ov, name in sorted_data[:3]:
-                print(f"    {name}: {ov:.4f}")
-                
-            print(f"  Top 3 Highest (Worst):")
-            for ov, name in sorted_data[-3:][::-1]:
-                print(f"    {name}: {ov:.4f}")
-
-    print_stats(duck_stats_list, duck_labels, "DuckDB")
-    print_stats(lady_stats_list, lady_labels, "Ladybug")
-
-    # --- Plotting ---
-    figsize = (figwidth_half, fig_height)
-    fig, axes = plt.subplots(1, 2, figsize=figsize)
-    ax_duck = axes[0]
-    ax_lady = axes[1]
     
 def plot_box(ax, data_list, labels, colors, hatches):
     if not data_list: return
@@ -537,8 +353,8 @@ def plot_all_systems(df: pd.DataFrame):
         lady_hatches.append(CHERI_HATCH)
 
     # --- Plotting ---
-    fig = plt.figure(figsize=(figwidth_full, 2 * fig_height))
-    gs_main = fig.add_gridspec(2, 1, hspace=0.6)
+    fig = plt.figure(figsize=(figwidth_full, 1.8 * fig_height))
+    gs_main = fig.add_gridspec(2, 1, hspace=0.5)
     
     # Row 1: Redis, LevelDB
     gs_top = gs_main[0].subgridspec(1, 2, wspace=0.2)
@@ -560,13 +376,17 @@ def plot_all_systems(df: pd.DataFrame):
     
     # Plot content
     if p_redis is not None:
+        print("redis")
         plot_bars_on_ax(ax_redis, p_redis, ps_redis, v_redis, b_redis, 'Throughput (ops/sec)')
     if p_level is not None:
+        print("leveldb")
         plot_bars_on_ax(ax_level, p_level, ps_level, v_level, b_level, '') # No Y label
     if p_mysql is not None:
-        plot_bars_on_ax(ax_mysql, p_mysql, ps_mysql, v_mysql, b_mysql, 'Throughput (TPS)', show_x_labels=False)
+        print("mysql")
+        plot_bars_on_ax(ax_mysql, p_mysql, ps_mysql, v_mysql, b_mysql, 'Throughput (TPS)', show_x_labels=False, bar_width_scale=0.5)
     if p_sqlite is not None:
-        plot_bars_on_ax(ax_sqlite, p_sqlite, ps_sqlite, v_sqlite, b_sqlite, '', show_x_labels=False)
+        print("sqlite")
+        plot_bars_on_ax(ax_sqlite, p_sqlite, ps_sqlite, v_sqlite, b_sqlite, '', show_x_labels=False, bar_width_scale=0.5)
     
     plot_box(ax_duck, duck_data_list, duck_labels, duck_colors, duck_hatches)
     plot_box(ax_lady, lady_data_list, lady_labels, lady_colors, lady_hatches)
@@ -593,7 +413,7 @@ def plot_all_systems(df: pd.DataFrame):
     ]
     
     for ax, txt in captions:
-        ax.text(0.5, -0.35, txt, transform=ax.transAxes, ha='center', va='top', fontsize=FONTSIZE_TITLE+2, fontweight='bold')
+        ax.text(0.5, -0.27, txt, transform=ax.transAxes, ha='center', va='top', fontsize=FONTSIZE_TITLE, fontweight='bold')
     
     # We can fake the legend handles to ensure order and completeness
     dummy_handles = []
@@ -635,103 +455,6 @@ def plot_all_systems(df: pd.DataFrame):
     plt.savefig(output_path, format='pdf', bbox_inches='tight')
     plt.close()
     print("Generated dbms_all_systems.pdf")
-
-def plot_combined_duckdb_ladybug(duckdb_warm, duckdb_cold, ladybug_data):
-    """Combined box plot for DuckDB and Ladybug Overheads."""
-    
-    duck_data_list = []
-    duck_stats_list = []
-    duck_labels = []
-    duck_colors = []
-    duck_hatches = []
-
-    cold_overheads = calculate_overhead_distribution(duckdb_cold, 'release-cold', 'release-mte-cold', label="DuckDB Cold")
-    if cold_overheads:
-        duck_data_list.append([x[0] for x in cold_overheads])
-        duck_stats_list.append(cold_overheads)
-        duck_labels.append("MTE Cold")
-        duck_colors.append(MTE_COLOR)
-        duck_hatches.append(MTE_HATCH)
-
-    warm_overheads = calculate_overhead_distribution(duckdb_warm, 'release', 'release-mte', label="DuckDB Warm")
-    if warm_overheads:
-        duck_data_list.append([x[0] for x in warm_overheads])
-        duck_stats_list.append(warm_overheads)
-        duck_labels.append("MTE Warm")
-        duck_colors.append(MTE_COLOR)
-        duck_hatches.append(MTE_HATCH)
-
-    lady_data_list = []
-    lady_stats_list = []
-    lady_labels = []
-    lady_colors = []
-    lady_hatches = []
-    
-    mte_overheads = calculate_overhead_distribution(ladybug_data, 'release-dynamic', 'release-mte', label="Ladybug MTE")
-    if mte_overheads:
-        lady_data_list.append([x[0] for x in mte_overheads])
-        lady_stats_list.append(mte_overheads)
-        lady_labels.append("MTE")
-        lady_colors.append(MTE_COLOR)
-        lady_hatches.append(MTE_HATCH)
-        
-    cheri_overheads = calculate_overhead_distribution(ladybug_data, 'release-static', 'release-cheri', label="Ladybug CHERI")
-    if cheri_overheads:
-        lady_data_list.append([x[0] for x in cheri_overheads])
-        lady_stats_list.append(cheri_overheads)
-        lady_labels.append("CHERI")
-        lady_colors.append(CHERI_COLOR)
-        lady_hatches.append(CHERI_HATCH)
-
-    if not duck_data_list and not lady_data_list:
-        print("No match pairs for combined box plot")
-        return
-
-    # --- Print Stats ---
-    def print_stats(data_list, labels, title):
-        print(f"\n=== {title} Statistics ===")
-        for data, label in zip(data_list, labels):
-            if not data: continue
-            
-            # data is list of (val, name)
-            vals = np.array([x[0] for x in data])
-            sorted_data = sorted(data, key=lambda x: x[0])
-            
-            print(f"-- {label} --")
-            print(f"  Mean (Arith): {np.mean(vals):.4f}")
-            print(f"  Min:          {np.min(vals):.4f}")
-            print(f"  Max:          {np.max(vals):.4f}")
-            
-            # Outliers
-            print(f"  Top 3 Lowest (Best):")
-            for ov, name in sorted_data[:3]:
-                print(f"    {name}: {ov:.4f}")
-                
-            print(f"  Top 3 Highest (Worst):")
-            for ov, name in sorted_data[-3:][::-1]:
-                print(f"    {name}: {ov:.4f}")
-
-    print_stats(duck_stats_list, duck_labels, "DuckDB")
-    print_stats(lady_stats_list, lady_labels, "Ladybug")
-
-    # --- Plotting ---
-    figsize = (figwidth_half, fig_height)
-    fig, axes = plt.subplots(1, 2, figsize=figsize)
-    ax_duck = axes[0]
-    ax_lady = axes[1]
-    
-    plot_box(ax_duck, duck_data_list, duck_labels, duck_colors, duck_hatches)
-    plot_box(ax_lady, lady_data_list, lady_labels, lady_colors, lady_hatches)
-    
-    ax_duck.set_ylabel('Normalized Runtime', fontsize=FONTSIZE_AXIS_LABEL)
-    
-    #sns.despine()
-
-    plt.tight_layout()
-    output_path = os.path.join(result_dir, "dbms_duckdb_ladybug.pdf")
-    plt.savefig(output_path, format='pdf', bbox_inches='tight')
-    plt.close()
-    print(f"Generated dbms_duckdb_ladybug.pdf")
 
 def plot_leveldb_motivation_slowdown(df: pd.DataFrame):
     data = df[

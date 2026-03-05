@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 from common import *
 import matplotlib.patches as mpatches
+import matplotlib.colors as mcolors
+
+import matplotlib.colors as mcolors
 
 def sort_workload(s):
     parts = s.split(' ')
@@ -107,9 +110,9 @@ def plot_datastructures(df):
     if n_systems > 6:
         print(f"Warning: {n_systems} systems found, but grid is 2x3. Some might be cut off or squeezed.")
     
-    fig = plt.figure(figsize=(figwidth_full, 2* fig_height))
+    fig = plt.figure(figsize=(figwidth_full, 1.8 * fig_height))
     # Adjust width ratios: first column narrower, others wider
-    gs = fig.add_gridspec(2, 3, hspace=0.6, wspace=0.3, width_ratios=[0.85, 1.1, 1.1])
+    gs = fig.add_gridspec(2, 3, hspace=0.5, wspace=0.3, width_ratios=[0.85, 1.1, 1.1])
     
     axes = []
     for i in range(2):
@@ -201,9 +204,10 @@ def plot_datastructures(df):
         if sys.islower():
             caption = f"({chr(97+i)}) {sys.title()}."
         if sys == 'art': caption = f"({chr(97+i)}) ART."
+        if sys == 'linklist': caption = f"({chr(97+i)}) Linked list."
         
         caption = r"\textbf{" + caption + "}"
-        ax.text(0.5, -0.35, caption, transform=ax.transAxes, ha='center', va='top', fontsize=FONTSIZE_TITLE+2)
+        ax.text(0.5, -0.27, caption, transform=ax.transAxes, ha='center', va='top', fontsize=FONTSIZE_TITLE)
         
         ax.set_xlabel('')
         ax.set_ylabel('Normalized Runtime' if i % 3 == 0 else '', fontsize=FONTSIZE_AXIS_LABEL)

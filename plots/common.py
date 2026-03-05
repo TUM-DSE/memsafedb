@@ -72,6 +72,11 @@ def darken(color):
     hue, saturation, value = rgb_to_hsv(to_rgb(color))
     return hsv_to_rgb((hue, saturation, value * 0.9))
 
+def lighten(color, factor=0.5):
+    from matplotlib.colors import to_rgb, to_hex
+    rgb = to_rgb(color)
+    return to_hex([c + (1.0 - c) * factor for c in rgb])
+
 hatch_def = [
     "//",
     '',
@@ -93,11 +98,11 @@ marker_def = [
     "+",
 ]
 
-BASELINE_MTE_COLOR = '#1F78B4' # 'A6CEE3'  # Dark blue
-MTE_COLOR = '#A6CEE3'          # Light blue
-ASAN_COLOR = '#984EA3'          # Purple
-BASELINE_CHERI_COLOR = '#FF7F00' # 'FDBF6F' # Dark Orange
-CHERI_COLOR = '#FDBF6F'          # Light Orange
+BASELINE_MTE_COLOR = lighten('#1F78B4', 0) # slightly lighter Dark blue
+MTE_COLOR = lighten('#1F78B4', 0.2)           # Light blue mathematically derived
+ASAN_COLOR = '#984EA3'                        # Purple
+BASELINE_CHERI_COLOR = lighten('#FF7F00', 0) # slightly lighter Dark Orange
+CHERI_COLOR = lighten('#FF7F00', 0.2)           # Light Orange mathematically derived
 
 BASELINE_MTE_HATCH = ''
 MTE_HATCH = '///'

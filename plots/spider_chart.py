@@ -20,7 +20,7 @@ def plot_spider_chart():
     softbound_data = (4, 7, 6)
     
     # MTE: 5 portability, 9 performance, 5 safety (Based on file: (9, 5, 5) if (Perf, Port, Safe))
-    mte_data = (9, 8, 4)
+    mte_data = (9, 8, 5)
     
     # CHERI: 2 portability, 5 performance, 9 safety (Based on file: (5, 2, 9) if (Perf, Port, Safe))
     cheri_data = (5, 2, 9)
@@ -48,10 +48,10 @@ def plot_spider_chart():
 
     # Plot Items
     # MTE
-    plot_item(mte_data, 'MTE', MTE_COLOR, 'h') # Diamond
+    plot_item(mte_data, 'MTE', BASELINE_MTE_COLOR, 'h') # Diamond
     
     # CHERI
-    plot_item(cheri_data, 'CHERI', CHERI_COLOR, '*') # Star
+    plot_item(cheri_data, 'CHERI', BASELINE_CHERI_COLOR, '*') # Star
     
     # ASan
     plot_item(asan_data, 'Software-based (e.g. ASan)', ASAN_COLOR, 'o') # Circle
