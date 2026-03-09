@@ -1,0 +1,5 @@
+variant,workload,peak_rss_bytes
+dynamic,ldbc-sf10,5420183552
+mte,ldbc-sf10,6074621952
+static,ldbc-sf10,3319263232
+cheri,ldbc-sf10,3321942016

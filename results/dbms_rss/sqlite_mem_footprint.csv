@@ -1,0 +1,5 @@
+variant,workload,peak_rss_bytes
+dynamic,tpcc,37421056
+mte,tpcc,38920192
+static,tpcc,39477248
+cheri,tpcc,39657472
