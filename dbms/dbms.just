@@ -15,6 +15,14 @@ benchmark db="all" repetitions="1":
 plot:
   python3 {{dbms_basedir}}/../plots/dbms.py
 
+# Count MTE/CHERI instructions in DBMS binaries
+instruction_counts db="all":
+  python3 {{dbms_basedir}}/benchmark/count_new_instructions.py --db "{{db}}"
+
+# Generate compiler instruction-count plot
+plot_instruction_counts:
+  python3 {{dbms_basedir}}/../plots/compiler_instructions.py
+
 # Load data to local SSDs of this and remote hosts
 prepare_local_data:
   #!/usr/bin/env bash
