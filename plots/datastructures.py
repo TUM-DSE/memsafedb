@@ -83,36 +83,22 @@ def plot_datastructures(df):
         print("No data loaded.")
         return
 
-    systems = sorted(df['system'].unique())
-    # Reorder to put 'art' and 'queue' in the first column (indices 0 and 3)
-    # Remaining systems fill indices 1, 2, 4, 5
-    priority = ['art', 'queue']
-    others = [s for s in systems if s not in priority]
+    systems = df['system'].unique().tolist()
     
-    ordered_systems = []
-    # Index 0: art
-    ordered_systems.append('art' if 'art' in systems else (others.pop(0) if others else ''))
-    # Index 1: other
-    ordered_systems.append(others.pop(0) if others else '')
-    # Index 2: other
-    ordered_systems.append(others.pop(0) if others else '')
-    # Index 3: queue
-    ordered_systems.append('queue' if 'queue' in systems else (others.pop(0) if others else ''))
-    # Index 4: other
-    ordered_systems.append(others.pop(0) if others else '')
-    # Index 5: other
-    ordered_systems.append(others.pop(0) if others else '')
+    desired_order = ['btree', 'ART', 'CLHT', 'skiplist', 'queue', 'linklist']
+    ordered_systems = [sys for sys in desired_order if sys in systems]
     
-    # Clean empty placeholders if less than 6 systems
-    ordered_systems = [s for s in ordered_systems if s]
+    for sys in systems:
+        if sys not in ordered_systems:
+            ordered_systems.append(sys)
     
     n_systems = len(ordered_systems)
     if n_systems > 6:
         print(f"Warning: {n_systems} systems found, but grid is 2x3. Some might be cut off or squeezed.")
     
     fig = plt.figure(figsize=(figwidth_full, 1.8 * fig_height))
-    # Adjust width ratios: first column narrower, others wider
-    gs = fig.add_gridspec(2, 3, hspace=0.5, wspace=0.3, width_ratios=[0.85, 1.1, 1.1])
+    # Adjust width ratios: middle column (ART, Queue) narrower
+    gs = fig.add_gridspec(2, 3, hspace=0.5, wspace=0.3, width_ratios=[1.1, 0.85, 1.1])
     
     axes = []
     for i in range(2):
@@ -203,8 +189,11 @@ def plot_datastructures(df):
         # Use simple heuristic for capitalization if mostly lowercase
         if sys.islower():
             caption = f"({chr(97+i)}) {sys.title()}."
-        if sys == 'art': caption = f"({chr(97+i)}) ART."
-        if sys == 'linklist': caption = f"({chr(97+i)}) Linked list."
+        if sys.lower() == 'art': caption = f"({chr(97+i)}) ART."
+        if sys.lower() == 'clht': caption = f"({chr(97+i)}) CLHT."
+        if sys.lower() == 'linklist': caption = f"({chr(97+i)}) Linked list."
+        if sys.lower() == 'btree': caption = f"({chr(97+i)}) B+Tree."
+        if sys.lower() == 'skiplist': caption = f"({chr(97+i)}) Skiplist."
         
         caption = r"\textbf{" + caption + "}"
         ax.text(0.5, -0.27, caption, transform=ax.transAxes, ha='center', va='top', fontsize=FONTSIZE_TITLE)
@@ -271,7 +260,7 @@ def plot_datastructures(df):
     fig.legend(
         handles=legend_patches,
         loc='upper center',
-        bbox_to_anchor=(0.5, 0.98),
+        bbox_to_anchor=(0.5, 0.99),
         ncol=2,
         fontsize=FONTSIZE_LEGEND,
         frameon=True

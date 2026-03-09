@@ -43,40 +43,94 @@ setup_duckdb sf="100":
   mv tpch-sf{{sf}}.db {{DATA_DIR}}
 
 # Run TPC-H for duckdb
-run_duckdb sf="1000": #(setup_duckdb sf)
+run_duckdb sf="100" monitor="false": #(setup_duckdb sf)
   #!/usr/bin/env bash
   set -eu pipefail
 
-  echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
-  # Run all release queries (warm cache)
-  echo "=== Running dynamic variant ===" >&2
-  for q in `seq 1 22`
-  do
-    {{dbms_basedir}}/duckdb/build/release-dynamic/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" > /dev/null 2>&1
-  done
-  for q in `seq 1 22`
-  do
-    {{dbms_basedir}}/duckdb/build/release-dynamic/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
-  done
+  if [[ "{{monitor}}" == "true" ]]; then
+    result_dir="{{dbms_basedir}}/../results/dbms_rss"
+    mkdir -p "${result_dir}"
+    PAGE_SIZE=$(getconf PAGESIZE)
+    echo "variant,phase,query,peak_rss_bytes" > "${result_dir}/duckdb_mem_footprint.csv"
+  fi
 
-  echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
-  # Run all MTE queries (warm cache)
-  echo "=== Running mte variant ===" >&2
-  for q in `seq 1 22`
-  do
-    GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" > /dev/null 2>&1
-  done
-  for q in `seq 1 22`
-  do
-    GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
-  done
+  run_cmd() {
+    local phase_label="$1"
+    local variant_label="$2"
+    local query_num="$3"
+    shift 3
+
+    if [[ "{{monitor}}" == "true" ]]; then
+      local csv_output="${result_dir}/duckdb_mem_footprint.csv"
+      
+      # Launch command
+      "$@" &
+      local server_pid=$!
+      
+      # RSS monitor background process to track peak
+      local temp_peak=$(mktemp)
+      echo 0 > "$temp_peak"
+      
+      (
+        local peak_rss_pages=0
+        while kill -0 $server_pid 2>/dev/null; do
+          if [[ -r "/proc/$server_pid/statm" ]]; then
+            local rss_pages=$(awk '{print $2}' "/proc/$server_pid/statm" 2>/dev/null || true)
+            if [[ -n "$rss_pages" ]] && [ "$rss_pages" -gt "$peak_rss_pages" ]; then
+              peak_rss_pages=$rss_pages
+            fi
+          fi
+          sleep 0.1
+        done
+        local peak_bytes=$(( peak_rss_pages * PAGE_SIZE ))
+        echo "$peak_bytes" > "$temp_peak"
+      ) &
+      local monitor_pid=$!
+      
+      wait $server_pid || true
+
+      wait $monitor_pid 2>/dev/null || true
+      
+      local final_peak=$(cat "$temp_peak")
+      rm -f "$temp_peak"
+      echo "${variant_label},${phase_label},q${query_num},${final_peak}" >> "${csv_output}"
+    else
+      "$@"
+    fi
+  }
+
+  if [[ "{{monitor}}" != "true" ]]; then
+    echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
+    # Run all release queries (warm cache)
+    echo "=== Running dynamic variant ===" >&2
+    for q in `seq 1 22`
+    do
+      run_cmd "warm" "dynamic" "$q" {{dbms_basedir}}/duckdb/build/release-dynamic/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" > /dev/null 2>&1
+    done
+    for q in `seq 1 22`
+    do
+      run_cmd "hot" "dynamic" "$q" {{dbms_basedir}}/duckdb/build/release-dynamic/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+    done
+
+    echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
+    # Run all MTE queries (warm cache)
+    echo "=== Running mte variant ===" >&2
+    for q in `seq 1 22`
+    do
+      run_cmd "warm" "mte" "$q" env GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" > /dev/null 2>&1
+    done
+    for q in `seq 1 22`
+    do
+      run_cmd "hot" "mte" "$q" env GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+    done
+  fi
 
   # Run all release queries (cold cache - drop caches before each query)
   echo "=== Running dynamic-cold variant ===" >&2
   for q in `seq 1 22`
   do
     echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
-    {{dbms_basedir}}/duckdb/build/release-dynamic/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+    run_cmd "cold" "dynamic" "$q" {{dbms_basedir}}/duckdb/build/release-dynamic/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
 
   # Run all MTE queries (cold cache - drop caches before each query)
@@ -84,8 +138,9 @@ run_duckdb sf="1000": #(setup_duckdb sf)
   for q in `seq 1 22`
   do
     echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
-    GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+    run_cmd "cold" "mte" "$q" env GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
+
 
 clean_duckdb:
   #!/usr/bin/env bash
@@ -145,14 +200,20 @@ build_redis:
   build_target "dynamic" "aarch64" ""
 
 # Run YCSB for redis
-run_redis recordcount="100000" operationcount="100000":
+run_redis recordcount="100000" operationcount="100000" monitor="false":
   #!/usr/bin/env bash
   set -euo pipefail
+
+  if [[ "{{monitor}}" == "true" ]]; then
+    result_dir="{{dbms_basedir}}/../results/dbms_rss"
+    mkdir -p "${result_dir}"
+    echo "variant,workload,rss_bytes" > "${result_dir}/redis_mem_footprint.csv"
+  fi
 
   for variant in "dynamic" "mte" "static" "cheri"; do
     case "$variant" in
       "dynamic" | "mte")
-        just dbms run_redis_local "$variant" "{{recordcount}}" "{{operationcount}}"
+        just dbms run_redis_local "$variant" "{{recordcount}}" "{{operationcount}}" "{{monitor}}"
         ;;
       "static" | "cheri")
         if [[ "$variant" == "static" ]]; then
@@ -160,12 +221,12 @@ run_redis recordcount="100000" operationcount="100000":
         else
           devshell="ace-cheri"
         fi
-        ssh ace "cd {{dbms_basedir}} && nix --extra-experimental-features flakes --extra-experimental-features nix-command develop .#${devshell} -c just dbms run_redis_local '$variant' '{{recordcount}}' '{{operationcount}}'"
+        ssh ace "cd {{dbms_basedir}} && nix --extra-experimental-features flakes --extra-experimental-features nix-command develop .#${devshell} -c just dbms run_redis_local '$variant' '{{recordcount}}' '{{operationcount}}' '{{monitor}}'"
         ;;
     esac
   done
 
-run_redis_local variant recordcount operationcount:
+run_redis_local variant recordcount operationcount monitor:
   #!/usr/bin/env bash
   set -euo pipefail
 
@@ -194,11 +255,39 @@ run_redis_local variant recordcount operationcount:
   redis_server="{{dbms_basedir}}/redis/src/redis-server${suffix}"
   redis_cli="{{dbms_basedir}}/redis/src/redis-cli${suffix}"
   
+  if [[ "{{monitor}}" == "true" ]]; then
+    PAGE_SIZE=$(getconf PAGESIZE)
+    result_dir="{{dbms_basedir}}/../results/dbms_rss"
+    csv_output="${result_dir}/redis_mem_footprint.csv"
+  fi
+
   for workload in a b c d e f; do
     echo "=== Running workload${workload} - {{variant}} ==="
 
     eval ${server_env} ${redis_server} --dir {{DATA_DIR}} --ignore-warnings ARM64-COW-BUG &> /dev/null &
     server_pid=$!
+
+    if [[ "{{monitor}}" == "true" ]]; then
+      # RSS monitor background process to track peak
+      temp_peak=$(mktemp)
+      echo 0 > "$temp_peak"
+      
+      (
+        peak_rss_pages=0
+        while kill -0 $server_pid 2>/dev/null; do
+          if [[ -r "/proc/$server_pid/statm" ]]; then
+            rss_pages=$(awk '{print $2}' "/proc/$server_pid/statm" 2>/dev/null || true)
+            if [[ -n "$rss_pages" ]] && [ "$rss_pages" -gt "$peak_rss_pages" ]; then
+              peak_rss_pages=$rss_pages
+            fi
+          fi
+          sleep 0.1
+        done
+        peak_bytes=$(( peak_rss_pages * PAGE_SIZE ))
+        echo "$peak_bytes" > "$temp_peak"
+      ) &
+      monitor_pid=$!
+    fi
 
     sleep 1
 
@@ -219,6 +308,15 @@ run_redis_local variant recordcount operationcount:
     rm -f {{DATA_DIR}}/dump.rdb
 
     wait ${server_pid} 2> /dev/null || true
+
+    if [[ "{{monitor}}" == "true" ]]; then
+
+      wait $monitor_pid 2>/dev/null || true
+      
+      final_peak=$(cat "$temp_peak")
+      rm -f "$temp_peak"
+      echo "{{variant}},${workload},${final_peak}" >> "${csv_output}"
+    fi
   done
 
 
@@ -345,35 +443,96 @@ run_leveldb_bench threads="1":
   ssh ace "taskset -c $cpus {{dbms_basedir}}/leveldb/build/release-cheri/db_bench ${bench_params}"
 
 # Run YCSB workloads against LevelDB
-run_leveldb recordcount="100000" operationcount="100000" threads="1":
+run_leveldb recordcount="100000" operationcount="100000" threads="1" monitor="false":
   #!/usr/bin/env bash
   set -euo pipefail
-  threads={{threads}}
+
+  if [[ "{{monitor}}" == "true" ]]; then
+    result_dir="{{dbms_basedir}}/../results/dbms_rss"
+    mkdir -p "${result_dir}"
+    echo "variant,workload,peak_rss_bytes" > "${result_dir}/leveldb_mem_footprint.csv"
+  fi
+
+  for variant in "dynamic" "mte" "static" "cheri"; do
+    case "$variant" in
+      "dynamic" | "mte")
+        just dbms::run_leveldb_local "$variant" "{{threads}}" "{{monitor}}"
+        ;;
+      "static" | "cheri")
+        if [[ "$variant" == "static" ]]; then
+          devshell="ace-aarch64"
+        else
+          devshell="ace-cheri"
+        fi
+        ssh ace "cd {{dbms_basedir}} && nix --extra-experimental-features flakes --extra-experimental-features nix-command develop .#${devshell} -c just dbms::run_leveldb_local '$variant' '{{threads}}' '{{monitor}}'"
+        ;;
+    esac
+  done
+
+run_leveldb_local suffix threads monitor:
+  #!/usr/bin/env bash
+  set -euo pipefail
 
   ycsb_dir="{{dbms_basedir}}/ycsb-cpp"
   workloads_dir="${ycsb_dir}/workloads"
   leveldb_props="${ycsb_dir}/leveldb/leveldb.properties"
+  build_root="${ycsb_dir}/build/release-{{suffix}}"
+  ycsb_bin="${build_root}/ycsb"
+  
+  if [[ "{{suffix}}" == "mte" ]]; then
+    ycsb_bin="env GLIBC_TUNABLES=\"glibc.mem.tagging=3\" $ycsb_bin"
+  fi
+  
+  if [ "{{threads}}" -eq 1 ]; then
+    cpus="0"
+  else
+    cpus="0-$(({{threads}} - 1))"
+  fi
 
-  for suffix in "dynamic" "mte" "static" "cheri"; do
-    build_root="{{dbms_basedir}}/ycsb-cpp/build/release-${suffix}"
-    ycsb_bin="${build_root}/ycsb"
-    if [[ $suffix == "mte" ]]; then
-      ycsb_bin="env GLIBC_TUNABLES=\"glibc.mem.tagging=3\" $ycsb_bin"
+  if [[ "{{monitor}}" == "true" ]]; then
+    PAGE_SIZE=$(getconf PAGESIZE)
+    result_dir="{{dbms_basedir}}/../results/dbms_rss"
+    csv_output="${result_dir}/leveldb_mem_footprint.csv"
+  fi
+
+  for workload in a b c d e f; do
+    echo "=== Running workload${workload} - threads: {{threads}} - {{suffix}} ==="
+    
+    # Run workload in background to gather RSS 
+    taskset -c $cpus ${ycsb_bin} -load -run -db leveldb -P $workloads_dir/workload${workload} -P $leveldb_props -p threadcount={{threads}} -s &
+    server_pid=$!
+    
+    if [[ "{{monitor}}" == "true" ]]; then
+      temp_peak=$(mktemp)
+      echo 0 > "$temp_peak"
+      
+      (
+        peak_rss_pages=0
+        while kill -0 $server_pid 2>/dev/null; do
+          if [[ -r "/proc/$server_pid/statm" ]]; then
+            rss_pages=$(awk '{print $2}' "/proc/$server_pid/statm" 2>/dev/null || true)
+            if [[ -n "$rss_pages" ]] && [ "$rss_pages" -gt "$peak_rss_pages" ]; then
+              peak_rss_pages=$rss_pages
+            fi
+          fi
+          sleep 0.1
+        done
+        peak_bytes=$(( peak_rss_pages * PAGE_SIZE ))
+        echo "$peak_bytes" > "$temp_peak"
+      ) &
+      monitor_pid=$!
     fi
-    if [ "$threads" -eq 1 ]; then
-      cpus="0"
-    else
-      cpus="0-$(($threads - 1))"
+    
+    wait $server_pid || true
+    
+    if [[ "{{monitor}}" == "true" ]]; then
+
+      wait $monitor_pid 2>/dev/null || true
+      
+      final_peak=$(cat "$temp_peak")
+      rm -f "$temp_peak"
+      echo "{{suffix}},${workload},${final_peak}" >> "${csv_output}"
     fi
-    for workload in a b c d e f; do
-      echo "=== Running workload${workload} - threads: $threads - $suffix ==="
-      if [[ $suffix == "mte" || $suffix == "dynamic" ]]; then
-        taskset -c $cpus  ${ycsb_bin} -load -run -db leveldb -P $workloads_dir/workload${workload} -P $leveldb_props -p threadcount=${threads} -s
-      fi
-      if [[ $suffix == "static" || $suffix == "cheri" ]]; then
-        ssh ace "taskset -c $cpus ${ycsb_bin} -load -run -db leveldb -P $workloads_dir/workload${workload} -P $leveldb_props -p threadcount=${threads} -s"
-      fi
-    done
   done
 
 build_sqlite:
@@ -410,13 +569,20 @@ build_sqlite:
     make -j sqlite3 "LDFLAGS.configure=$LDFLAGS_CONF $LIBS_CONF"
   )
 
-run_sqlite_ace warehouses="1" duration="60" clients="1":
+run_sqlite_ace warehouses="1" duration="60" clients="1" monitor="false":
   #!/usr/bin/env bash
   set -euo pipefail
 
   ddl_path="{{dbms_basedir}}/sqlite/tpcc.sql"
   if [[ ! -f "${ddl_path}" ]]; then
     cp "$(dirname "$(which py-tpcc)")/../lib/py-tpcc/tpcc.sql" "${ddl_path}"
+  fi
+
+  if [[ "{{monitor}}" == "true" ]]; then
+    result_dir="{{dbms_basedir}}/../results/dbms_rss"
+    mkdir -p "${result_dir}"
+    PAGE_SIZE=$(getconf PAGESIZE)
+    csv_output="${result_dir}/sqlite_mem_footprint.csv"
   fi
 
   mkdir -p "{{DATA_DIR}}/sqlite"
@@ -433,12 +599,47 @@ run_sqlite_ace warehouses="1" duration="60" clients="1":
 
     export PATH="${run_root}:${PATH}"
     cd "${run_root}"
-    py-tpcc --warehouses "{{warehouses}}" --duration "{{duration}}" --clients "{{clients}}" --ddl "${ddl_path}" --config "${config_path}" sqlite
+    
+    # Run py-tpcc in background if monitoring
+    py-tpcc --warehouses "{{warehouses}}" --duration "{{duration}}" --clients "{{clients}}" --ddl "${ddl_path}" --config "${config_path}" sqlite &
+    server_pid=$!
+    
+    if [[ "{{monitor}}" == "true" ]]; then
+      temp_peak=$(mktemp)
+      echo 0 > "$temp_peak"
+      
+      (
+        peak_rss_pages=0
+        while kill -0 $server_pid 2>/dev/null; do
+          if [[ -r "/proc/$server_pid/statm" ]]; then
+            rss_pages=$(awk '{print $2}' "/proc/$server_pid/statm" 2>/dev/null || true)
+            if [[ -n "$rss_pages" ]] && [ "$rss_pages" -gt "$peak_rss_pages" ]; then
+              peak_rss_pages=$rss_pages
+            fi
+          fi
+          sleep 0.1
+        done
+        peak_bytes=$(( peak_rss_pages * PAGE_SIZE ))
+        echo "$peak_bytes" > "$temp_peak"
+      ) &
+      monitor_pid=$!
+    fi
+    
+    wait $server_pid || true
+    
+    if [[ "{{monitor}}" == "true" ]]; then
+
+      wait $monitor_pid 2>/dev/null || true
+      
+      final_peak=$(cat "$temp_peak")
+      rm -f "$temp_peak"
+      echo "${suffix},tpcc,${final_peak}" >> "${csv_output}"
+    fi
 
     rm -f "${db_path}" "${db_path}-journal" "${db_path}-wal" "${db_path}-shm"
   done
 
-run_sqlite_eliza warehouses="1" duration="60" clients="1":
+run_sqlite_eliza warehouses="1" duration="60" clients="1" monitor="false":
   #!/usr/bin/env bash
   set -euo pipefail
 
@@ -451,6 +652,13 @@ run_sqlite_eliza warehouses="1" duration="60" clients="1":
   if [[ -z "$GLIBC_MTE" ]]; then
     echo "Error: MTE-enabled glibc not found. GLIBC_MTE must be set" >&2
     exit 1
+  fi
+
+  if [[ "{{monitor}}" == "true" ]]; then
+    result_dir="{{dbms_basedir}}/../results/dbms_rss"
+    mkdir -p "${result_dir}"
+    PAGE_SIZE=$(getconf PAGESIZE)
+    csv_output="${result_dir}/sqlite_mem_footprint.csv"
   fi
 
   mkdir -p "{{DATA_DIR}}/sqlite"
@@ -475,16 +683,57 @@ run_sqlite_eliza warehouses="1" duration="60" clients="1":
     export PATH="${run_root}:${PATH}"
 
     cd "${run_root}"
-    LD_LIBRARY_PATH="${ld_library_path}" LD_PRELOAD="${preload}" GLIBC_TUNABLES="${tunables}" py-tpcc --warehouses "{{warehouses}}" --duration "{{duration}}" --clients "{{clients}}" --ddl "${ddl_path}" --config "${config_path}" sqlite
+    
+    LD_LIBRARY_PATH="${ld_library_path}" LD_PRELOAD="${preload}" GLIBC_TUNABLES="${tunables}" py-tpcc --warehouses "{{warehouses}}" --duration "{{duration}}" --clients "{{clients}}" --ddl "${ddl_path}" --config "${config_path}" sqlite &
+    server_pid=$!
+    
+    if [[ "{{monitor}}" == "true" ]]; then
+      temp_peak=$(mktemp)
+      echo 0 > "$temp_peak"
+      
+      (
+        peak_rss_pages=0
+        while kill -0 $server_pid 2>/dev/null; do
+          if [[ -r "/proc/$server_pid/statm" ]]; then
+            rss_pages=$(awk '{print $2}' "/proc/$server_pid/statm" 2>/dev/null || true)
+            if [[ -n "$rss_pages" ]] && [ "$rss_pages" -gt "$peak_rss_pages" ]; then
+              peak_rss_pages=$rss_pages
+            fi
+          fi
+          sleep 0.1
+        done
+        peak_bytes=$(( peak_rss_pages * PAGE_SIZE ))
+        echo "$peak_bytes" > "$temp_peak"
+      ) &
+      monitor_pid=$!
+    fi
+    
+    wait $server_pid || true
+    
+    if [[ "{{monitor}}" == "true" ]]; then
+
+      wait $monitor_pid 2>/dev/null || true
+      
+      final_peak=$(cat "$temp_peak")
+      rm -f "$temp_peak"
+      echo "${suffix},tpcc,${final_peak}" >> "${csv_output}"
+    fi
 
     rm -f "${db_path}" "${db_path}-journal" "${db_path}-wal" "${db_path}-shm"
   done
 
-run_sqlite warehouses="1" duration="60" clients="1":
+run_sqlite warehouses="1" duration="60" clients="1" monitor="false":
   #!/usr/bin/env bash
   set -euo pipefail
-  just dbms::run_sqlite_eliza {{warehouses}} {{duration}} {{clients}}
-  ssh ace "nix develop {{dbms_basedir}}/..#ace-cheri --command just -f {{dbms_basedir}}/dbms.just run_sqlite_ace {{warehouses}} {{duration}} {{clients}}"
+  
+  if [[ "{{monitor}}" == "true" ]]; then
+    result_dir="{{dbms_basedir}}/../results/dbms_rss"
+    mkdir -p "${result_dir}"
+    echo "variant,workload,peak_rss_bytes" > "${result_dir}/sqlite_mem_footprint.csv"
+  fi
+  
+  just dbms::run_sqlite_eliza "{{warehouses}}" "{{duration}}" "{{clients}}" "{{monitor}}"
+  ssh ace "nix develop {{dbms_basedir}}/..#ace-cheri --command just -f {{dbms_basedir}}/dbms.just run_sqlite_ace '{{warehouses}}' '{{duration}}' '{{clients}}' '{{monitor}}'"
 
 setup_ladybug sf="10":
   #!/usr/bin/env python
@@ -547,11 +796,19 @@ build_ladybug:
   ARCH=static make -j release
   ARCH=static make -j python
 
-run_ladybug_ace threads="4" sf="10":
+run_ladybug_ace threads="4" sf="10" monitor="false":
   #!/usr/bin/env bash
   set -eu pipefail
   export CSV_DIR="{{DATA_DIR}}/ladybug/dataset/"
   export SCALE_FACTOR="{{sf}}"
+
+  if [[ "{{monitor}}" == "true" ]]; then
+    result_dir="{{dbms_basedir}}/../results/dbms_rss"
+    mkdir -p "${result_dir}"
+    PAGE_SIZE=$(getconf PAGESIZE)
+    csv_output="${result_dir}/ladybug_mem_footprint.csv"
+  fi
+
   for suffix in "static" "cheri"; do
     build_root="{{dbms_basedir}}/ladybug/build-${suffix}"
     serialized_root="${build_root}/ldbc-serialized"
@@ -559,15 +816,66 @@ run_ladybug_ace threads="4" sf="10":
     mkdir -p "${serialized_root}"
     export SERIALIZED_DIR="${serialized_root}"
     echo "=== Executing $suffix - threads: {{threads}} ==="
+    
     PYTHONPATH="{{dbms_basedir}}/ladybug/tools/python_api/tools/python_api/build-${suffix}:${PYTHONPATH:-}" \
-      DRY_RUN=true python3 {{dbms_basedir}}/ladybug/benchmark/benchmark_runner.py --dataset ldbc-sf{{sf}} --thread {{threads}}
+      DRY_RUN=true python3 {{dbms_basedir}}/ladybug/benchmark/benchmark_runner.py --dataset ldbc-sf{{sf}} --thread {{threads}} &
+    server_pid=$!
+    
+    if [[ "{{monitor}}" == "true" ]]; then
+      temp_peak=$(mktemp)
+      echo 0 > "$temp_peak"
+      
+      (
+        peak_rss_pages=0
+        pgid=$(ps -o pgid= -p $server_pid 2>/dev/null | tr -d ' ')
+        while kill -0 $server_pid 2>/dev/null; do
+          if [[ -n "$pgid" ]]; then
+            total_pages=0
+            for pid in $(pgrep -g $pgid 2>/dev/null); do
+              if [[ -r "/proc/$pid/statm" ]]; then
+                rss_pages=$(awk '{print $2}' "/proc/$pid/statm" 2>/dev/null || true)
+                if [[ -n "$rss_pages" ]]; then
+                  total_pages=$((total_pages + rss_pages))
+                fi
+              fi
+            done
+            if [[ "$total_pages" -gt "$peak_rss_pages" ]]; then
+              peak_rss_pages=$total_pages
+            fi
+          fi
+          sleep 0.1
+        done
+        peak_bytes=$(( peak_rss_pages * PAGE_SIZE ))
+        echo "$peak_bytes" > "$temp_peak"
+      ) &
+      monitor_pid=$!
+    fi
+    
+    wait $server_pid || true
+    
+    if [[ "{{monitor}}" == "true" ]]; then
+
+      wait $monitor_pid 2>/dev/null || true
+      
+      final_peak=$(cat "$temp_peak")
+      rm -f "$temp_peak"
+      echo "${suffix},ldbc-sf{{sf}},${final_peak}" >> "${csv_output}"
+    fi
   done
 
-run_ladybug_eliza threads="4" sf="10":
+run_ladybug_eliza threads="4" sf="10" monitor="false":
   #!/usr/bin/env bash
   set -eu pipefail
   export CSV_DIR="{{DATA_DIR}}/ladybug/dataset/"
   export SCALE_FACTOR="{{sf}}"
+
+  if [[ "{{monitor}}" == "true" ]]; then
+    result_dir="{{dbms_basedir}}/../results/dbms_rss"
+    mkdir -p "${result_dir}"
+    PAGE_SIZE=$(getconf PAGESIZE)
+    csv_output="${result_dir}/ladybug_mem_footprint.csv"
+  fi
+
   for suffix in "dynamic" "mte"; do
     tunables=""
     if [[ "${suffix}" == "mte" ]]; then
@@ -579,16 +887,66 @@ run_ladybug_eliza threads="4" sf="10":
     mkdir -p "${serialized_root}"
     export SERIALIZED_DIR="${serialized_root}"
     echo "=== Executing $suffix - threads: {{threads}} ==="
+    
     PYTHONPATH="{{dbms_basedir}}/ladybug/tools/python_api/tools/python_api/build-${suffix}:${PYTHONPATH:-}" GLIBC_TUNABLES="${tunables}" \
-      DRY_RUN=true python3 {{dbms_basedir}}/ladybug/benchmark/benchmark_runner.py --dataset ldbc-sf{{sf}} --thread {{threads}}
+      DRY_RUN=true python3 {{dbms_basedir}}/ladybug/benchmark/benchmark_runner.py --dataset ldbc-sf{{sf}} --thread {{threads}} &
+    server_pid=$!
+    
+    if [[ "{{monitor}}" == "true" ]]; then
+      temp_peak=$(mktemp)
+      echo 0 > "$temp_peak"
+      
+      (
+        peak_rss_pages=0
+        pgid=$(ps -o pgid= -p $server_pid 2>/dev/null | tr -d ' ')
+        while kill -0 $server_pid 2>/dev/null; do
+          if [[ -n "$pgid" ]]; then
+            total_pages=0
+            for pid in $(pgrep -g $pgid 2>/dev/null); do
+              if [[ -r "/proc/$pid/statm" ]]; then
+                rss_pages=$(awk '{print $2}' "/proc/$pid/statm" 2>/dev/null || true)
+                if [[ -n "$rss_pages" ]]; then
+                  total_pages=$((total_pages + rss_pages))
+                fi
+              fi
+            done
+            if [[ "$total_pages" -gt "$peak_rss_pages" ]]; then
+              peak_rss_pages=$total_pages
+            fi
+          fi
+          sleep 0.1
+        done
+        peak_bytes=$(( peak_rss_pages * PAGE_SIZE ))
+        echo "$peak_bytes" > "$temp_peak"
+      ) &
+      monitor_pid=$!
+    fi
+    
+    wait $server_pid || true
+    
+    if [[ "{{monitor}}" == "true" ]]; then
+
+      wait $monitor_pid 2>/dev/null || true
+      
+      final_peak=$(cat "$temp_peak")
+      rm -f "$temp_peak"
+      echo "${suffix},ldbc-sf{{sf}},${final_peak}" >> "${csv_output}"
+    fi
   done
 
-run_ladybug threads="4" sf="10":
+run_ladybug threads="4" sf="10" monitor="false":
   #!/usr/bin/env bash
+  
+  if [[ "{{monitor}}" == "true" ]]; then
+    result_dir="{{dbms_basedir}}/../results/dbms_rss"
+    mkdir -p "${result_dir}"
+    echo "variant,workload,peak_rss_bytes" > "${result_dir}/ladybug_mem_footprint.csv"
+  fi
+  
   just dbms::setup_ladybug "{{sf}}"
-  just dbms::run_ladybug_eliza "{{threads}}" "{{sf}}"
+  just dbms::run_ladybug_eliza "{{threads}}" "{{sf}}" "{{monitor}}"
   ssh ace "nix develop {{dbms_basedir}}/..#ace-aarch64 --command  just -f {{dbms_basedir}}/dbms.just setup_ladybug {{sf}}"
-  ssh ace "nix develop {{dbms_basedir}}/..#ace-aarch64 --command just -f {{dbms_basedir}}/dbms.just run_ladybug_ace {{threads}} {{sf}}"
+  ssh ace "nix develop {{dbms_basedir}}/..#ace-aarch64 --command just -f {{dbms_basedir}}/dbms.just run_ladybug_ace '{{threads}}' '{{sf}}' '{{monitor}}'"
 
 build_mysql:
   #!/usr/bin/env bash
@@ -599,7 +957,7 @@ build_mysql:
   cmake --build build/release-mte -j
 
 # Run TPC-C for mysql
-run_mysql:
+run_mysql monitor="false":
   #!/usr/bin/env bash
   set -euo pipefail
 
@@ -621,6 +979,14 @@ run_mysql:
   threads="${OLTP_THREADS:-4}"
   duration="${OLTP_DURATION:-60}"
   report_interval="${OLTP_REPORT_INTERVAL:-10}"
+
+  if [[ "{{monitor}}" == "true" ]]; then
+    result_dir="{{dbms_basedir}}/../results/dbms_rss"
+    mkdir -p "${result_dir}"
+    PAGE_SIZE=$(getconf PAGESIZE)
+    csv_output="${result_dir}/mysql_mem_footprint.csv"
+    echo "variant,workload,peak_rss_bytes" > "${csv_output}"
+  fi
 
   for suffix in "" "-mte"; do
     label="release"
@@ -680,6 +1046,27 @@ run_mysql:
 
     ${sysbench_bin} ${oltp_script} ${sysbench_opts} prepare
 
+    if [[ "{{monitor}}" == "true" ]]; then
+      temp_peak=$(mktemp)
+      echo 0 > "$temp_peak"
+      
+      (
+        peak_rss_pages=0
+        while kill -0 $mysqld_pid 2>/dev/null; do
+          if [[ -r "/proc/$mysqld_pid/statm" ]]; then
+            rss_pages=$(awk '{print $2}' "/proc/$mysqld_pid/statm" 2>/dev/null || true)
+            if [[ -n "$rss_pages" ]] && [ "$rss_pages" -gt "$peak_rss_pages" ]; then
+              peak_rss_pages=$rss_pages
+            fi
+          fi
+          sleep 0.1
+        done
+        peak_bytes=$(( peak_rss_pages * PAGE_SIZE ))
+        echo "$peak_bytes" > "$temp_peak"
+      ) &
+      monitor_pid=$!
+    fi
+
     ${sysbench_bin} ${oltp_script} ${sysbench_opts} \
       --threads="${threads}" \
       --time="${duration}" \
@@ -691,4 +1078,24 @@ run_mysql:
 
     ${mysqladmin_cmd} shutdown
     trap - EXIT
+
+    if [[ "{{monitor}}" == "true" ]]; then
+
+      wait $monitor_pid 2>/dev/null || true
+      
+      final_peak=$(cat "$temp_peak")
+      rm -f "$temp_peak"
+      variant_name="dynamic"
+      [[ "${suffix}" == "-mte" ]] && variant_name="mte"
+      echo "${variant_name},sysbench,${final_peak}" >> "${csv_output}"
+    fi
   done
+
+run_all_rss:
+  #!/usr/bin/env bash
+  just dbms::run_duckdb 100 true
+  just dbms::run_redis 100000 100000 true
+  just dbms::run_leveldb 100000 100000 1 true
+  just dbms::run_sqlite 1 60 1 true
+  just dbms::run_mysql true
+  just dbms::run_ladybug 4 10 true

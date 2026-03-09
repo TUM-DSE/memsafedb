@@ -93,6 +93,7 @@
       icu
       texliveFull
       jq
+      smem
     ];
   in
   {
