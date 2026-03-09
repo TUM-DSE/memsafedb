@@ -19,6 +19,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 DBMS_DIR = SCRIPT_DIR.parent
 PROJECT_ROOT = DBMS_DIR.parent
 RESULTS_FILE = PROJECT_ROOT / "results" / "compiler_instruction_counts.csv"
+BREAKDOWN_FILE = PROJECT_ROOT / "results" / "compiler_instruction_breakdown.csv"
 
 DATABASES = ["duckdb", "leveldb", "redis", "sqlite", "mysql", "ladybug"]
 
@@ -77,8 +78,7 @@ def candidate_paths() -> dict[str, list[BinaryTarget]]:
             BinaryTarget("mysql", "mte", "release-mte", DBMS_DIR / "mysql" / "build" / "release-mte" / "bin" / "mysqld"),
         ],
         "ladybug": [
-            BinaryTarget("ladybug", "mte", "release-mte", DBMS_DIR / "ladybug" / "build-mte" / "tools" / "benchmark" / "lbug_benchmark"),
-            BinaryTarget("ladybug", "cheri", "release-cheri", DBMS_DIR / "ladybug" / "build-cheri" / "tools" / "benchmark" / "lbug_benchmark"),
+            BinaryTarget("ladybug", "mte", "release-mte", DBMS_DIR / "ladybug" / "build-mte" / "release" / "tools" / "shell" / "lbug"),
         ],
     }
 
@@ -176,16 +176,66 @@ def resolve_glibc_path(binary_path: Path) -> Path | None:
     return None
 
 
-def count_mte_in_shared_runtime(binary_path: Path) -> tuple[int, float, str]:
+def count_mte_in_shared_runtime(binary_path: Path) -> tuple[int, float, str, dict[str, int]]:
     glibc_path = resolve_glibc_path(binary_path)
     if glibc_path is None:
-        return 0, 0.0, ""
+        return 0, 0.0, "", {}
 
     disassembly, _ = disassemble(BinaryTarget("glibc", "mte", "shared", glibc_path))
-    total, operand_count, manip_count, _, _, _ = count_instructions(disassembly, "mte")
+    total, operand_count, manip_count, _, manip_mnemonic_counts, _ = count_instructions(disassembly, "mte")
     del operand_count
     pct = (100.0 * manip_count / total) if total else 0.0
-    return manip_count, pct, str(glibc_path)
+    return manip_count, pct, str(glibc_path), manip_mnemonic_counts
+
+
+def breakdown_rows_for_target(
+    row: dict[str, object],
+    operand_mnemonic_counts: dict[str, int],
+    manip_mnemonic_counts: dict[str, int],
+    glibc_mnemonic_counts: dict[str, int],
+) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+
+    for mnemonic, count in sorted(operand_mnemonic_counts.items()):
+        rows.append(
+            {
+                "database": row["database"],
+                "mechanism": row["mechanism"],
+                "variant": row["variant"],
+                "component": "binary",
+                "category": "capability-operand",
+                "mnemonic": mnemonic,
+                "count": count,
+            }
+        )
+
+    for mnemonic, count in sorted(manip_mnemonic_counts.items()):
+        rows.append(
+            {
+                "database": row["database"],
+                "mechanism": row["mechanism"],
+                "variant": row["variant"],
+                "component": "binary",
+                "category": "new-instruction",
+                "mnemonic": mnemonic,
+                "count": count,
+            }
+        )
+
+    for mnemonic, count in sorted(glibc_mnemonic_counts.items()):
+        rows.append(
+            {
+                "database": row["database"],
+                "mechanism": row["mechanism"],
+                "variant": row["variant"],
+                "component": "glibc",
+                "category": "new-instruction",
+                "mnemonic": mnemonic,
+                "count": count,
+            }
+        )
+
+    return rows
 
 
 def count_instructions(disassembly: str, mechanism: str) -> tuple[int, int, int, dict[str, int], dict[str, int], int]:
@@ -215,8 +265,9 @@ def count_instructions(disassembly: str, mechanism: str) -> tuple[int, int, int,
     return total, operand_count, manip_count, operand_mnemonic_counts, manip_mnemonic_counts, unknown_count
 
 
-def rows_for_database(database: str) -> list[dict[str, object]]:
+def rows_for_database(database: str) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     rows: list[dict[str, object]] = []
+    breakdown_rows: list[dict[str, object]] = []
     for target in candidate_paths()[database]:
         row: dict[str, object] = {
             "database": target.database,
@@ -266,8 +317,9 @@ def rows_for_database(database: str) -> list[dict[str, object]]:
             glibc_count = 0
             glibc_pct = 0.0
             glibc_path = ""
+            glibc_mnemonic_counts: dict[str, int] = {}
             if target.mechanism == "mte":
-                glibc_count, glibc_pct, glibc_path = count_mte_in_shared_runtime(target.path)
+                glibc_count, glibc_pct, glibc_path, glibc_mnemonic_counts = count_mte_in_shared_runtime(target.path)
             status = "ok"
 
             row.update(
@@ -289,6 +341,9 @@ def rows_for_database(database: str) -> list[dict[str, object]]:
                     "operand_mnemonic_counts": json.dumps(dict(sorted(operand_mnemonic_counts.items())), sort_keys=True),
                     "manip_mnemonic_counts": json.dumps(dict(sorted(manip_mnemonic_counts.items())), sort_keys=True),
                 }
+            )
+            breakdown_rows.extend(
+                breakdown_rows_for_target(row, operand_mnemonic_counts, manip_mnemonic_counts, glibc_mnemonic_counts)
             )
         except Exception as exc:  # noqa: BLE001
             row.update(
@@ -314,13 +369,14 @@ def rows_for_database(database: str) -> list[dict[str, object]]:
 
         rows.append(row)
 
-    return rows
+    return rows, breakdown_rows
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Count CHERI/MTE-specific instructions in DBMS binaries")
     parser.add_argument("--db", default="all", help=f"Database to inspect (all, {', '.join(DATABASES)})")
     parser.add_argument("--output", type=Path, default=RESULTS_FILE, help="Output CSV file")
+    parser.add_argument("--breakdown-output", type=Path, default=BREAKDOWN_FILE, help="Output CSV file for mnemonic breakdown")
     args = parser.parse_args()
 
     if args.db == "all":
@@ -332,6 +388,7 @@ def main() -> int:
         return 1
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.breakdown_output.parent.mkdir(parents=True, exist_ok=True)
 
     fieldnames = [
         "database",
@@ -357,16 +414,34 @@ def main() -> int:
     ]
 
     all_rows: list[dict[str, object]] = []
+    all_breakdown_rows: list[dict[str, object]] = []
     for database in databases:
         print(f"Counting instructions for {database}...")
-        all_rows.extend(rows_for_database(database))
+        rows, breakdown_rows = rows_for_database(database)
+        all_rows.extend(rows)
+        all_breakdown_rows.extend(breakdown_rows)
 
     with args.output.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(all_rows)
 
+    breakdown_fieldnames = [
+        "database",
+        "mechanism",
+        "variant",
+        "component",
+        "category",
+        "mnemonic",
+        "count",
+    ]
+    with args.breakdown_output.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=breakdown_fieldnames)
+        writer.writeheader()
+        writer.writerows(all_breakdown_rows)
+
     print(f"Wrote {len(all_rows)} rows to {args.output}")
+    print(f"Wrote {len(all_breakdown_rows)} rows to {args.breakdown_output}")
     return 0
 
 

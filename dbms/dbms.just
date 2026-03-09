@@ -23,6 +23,10 @@ instruction_counts db="all":
 plot_instruction_counts:
   python3 {{dbms_basedir}}/../plots/compiler_instructions.py
 
+# Generate compiler instruction breakdown LaTeX table
+instruction_breakdown_table top="all":
+  python3 {{dbms_basedir}}/../plots/compiler_instruction_breakdown_table.py --top "{{top}}"
+
 # Load data to local SSDs of this and remote hosts
 prepare_local_data:
   #!/usr/bin/env bash
