@@ -111,7 +111,7 @@ def plot_combined(output_prefix="bug_"):
     else:
         ax_line.set_xticklabels([str(y) for y in all_years], fontsize=FONTSIZE_TICK_LABEL, rotation=45)
 
-    ax_line.set_title(r"\textbf{(a) Number of bugs/CVEs over time}", fontsize=FONTSIZE_TITLE, y=-0.35)
+    ax_line.set_title(r"\textbf{(a) Number of new bugs/CVEs per year}", fontsize=FONTSIZE_TITLE, y=-0.35)
 
 
     # ════════════ Bottom: Stacked bars ════════════
@@ -140,11 +140,11 @@ def plot_combined(output_prefix="bug_"):
         ax_bar.set_xticklabels([str(y) for y in bug_years], fontsize=FONTSIZE_TICK_LABEL, rotation=45)
 
     ax_bar_r = ax_bar.twinx()
-    ax_bar_r.plot(bug_years, pct_values, color="darkgrey", marker='o',
+    ax_bar_r.plot(bug_years, pct_values, color="black", marker='o',
                   markersize=2, linewidth=1, label=r'\% Memory Safety', zorder=3)
     if len(bug_years) >= 2:
         ax_bar_r.annotate('\\% Memory\nSafety', xy=(bug_years[2], pct_values[2]), xytext=(0, 13),
-                          textcoords='offset points', ha='center', va='center', fontsize=FONTSIZE_TICK_LABEL, color='darkgrey')
+                          textcoords='offset points', ha='center', va='center', fontsize=FONTSIZE_TICK_LABEL, color='black')
     ax_bar_r.set_ylabel(r'\% of Memory Safety Bugs', fontsize=FONTSIZE_AXIS_LABEL)
     ax_bar_r.set_ylim(0, max_pct * 1.15)
 

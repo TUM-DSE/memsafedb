@@ -129,22 +129,17 @@ def main():
         m_val = np.nanmean(mte_data[i]) if has_mte else 0
         m_err = compute_ci(mte_data[i]) if has_mte else 0
         
-        if has_cheri and has_mte:
+        if has_cheri:
             cheri_plot_data.append(c_val)
             cheri_positions.append(x[i] - width/2)
             cheri_errors.append(c_err)
+        else:
+            ax.plot(x[i] - width/2, 0.7, clip_on=False, marker='x', color='red', markersize=4, zorder=5)
             
+        if has_mte:
             mte_plot_data.append(m_val)
             mte_positions.append(x[i] + width/2)
             mte_errors.append(m_err)
-        elif has_mte:
-            mte_plot_data.append(m_val)
-            mte_positions.append(x[i])
-            mte_errors.append(m_err)
-        elif has_cheri:
-            cheri_plot_data.append(c_val)
-            cheri_positions.append(x[i])
-            cheri_errors.append(c_err)
             
     # We want CHERI and MTE side by side bar plots
     rects1 = None
