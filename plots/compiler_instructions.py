@@ -245,7 +245,7 @@ def main():
             Patch(facecolor=BASELINE_MTE_COLOR, hatch=MTE_HATCH, edgecolor="black", label="MTE glibc"),
         ],
         loc="upper center",
-        bbox_to_anchor=(0.52, 0.87),
+        bbox_to_anchor=(0.52, 0.92),
         ncol=4,
         frameon=True,
         fontsize=FONTSIZE_LEGEND - 2,
