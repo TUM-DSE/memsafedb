@@ -100,7 +100,7 @@ def main():
     mte_data = ordered_mte
     cheri_data = ordered_cheri
 
-    fig, ax = plt.subplots(figsize=(figwidth_half, fig_height))
+    fig, ax = plt.subplots(figsize=(figwidth_half, 0.7*fig_height))
     
     x = np.arange(len(systems))
     width = 0.35
@@ -164,7 +164,7 @@ def main():
                     val_str = '0'
                 ax.annotate(f'{val_str}x',
                             xy=(rect.get_x() + rect.get_width() / 2, height + err),
-                            xytext=(0, 3),  # 3 points vertical offset
+                            xytext=(0, 1),  # 3 points vertical offset
                             textcoords="offset points",
                             ha='center', va='bottom', fontsize=FONTSIZE_ANNOTATION+1)
 
@@ -178,9 +178,9 @@ def main():
     for h, e in zip(mte_plot_data, mte_errors):
         all_ohs.append(h + e)
         
-    ax.set_ylim(0.7, 1.9)
+    ax.set_ylim(0.7, 2)
                            
-    ax.set_ylabel('Normalized memory footprint', fontsize=FONTSIZE_AXIS_LABEL)
+    ax.set_ylabel('Memory (norm.)', fontsize=FONTSIZE_AXIS_LABEL)
     ax.set_xticks(x)
     ax.set_xticklabels(systems, fontsize=FONTSIZE_AXIS_LABEL)
     
@@ -189,11 +189,11 @@ def main():
         Patch(facecolor=CHERI_COLOR, hatch=CHERI_HATCH, edgecolor='black', label='CHERI'),
         Patch(facecolor=MTE_COLOR, hatch=MTE_HATCH, edgecolor='black', label='MTE')
     ]
-    ax.legend(handles=legend_elements, loc='upper right', frameon=True, fontsize=FONTSIZE_LEGEND)
+    ax.legend(handles=legend_elements, ncol=2, loc='upper right', frameon=True, fontsize=FONTSIZE_LEGEND)
     
-    fig.text(0.55, 0.99, lower_better_str, ha='center', va='top', color='blue', fontsize=FONTSIZE_TITLE)
+    fig.text(0.5, 0.8, lower_better_str, ha='center', va='top', color='blue', fontsize=FONTSIZE_TITLE)
     ax.grid(True, axis='y', linestyle='--', alpha=0.7, zorder=0)
-    fig.tight_layout()
+    fig.tight_layout(rect=[0, 0.05, 1, 0.95])
     
     output_path = os.path.join(result_dir, "memory_overhead.pdf")
     plt.savefig(output_path, bbox_inches='tight')

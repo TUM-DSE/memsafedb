@@ -96,7 +96,7 @@ def plot_datastructures(df):
     if n_systems > 6:
         print(f"Warning: {n_systems} systems found, but grid is 2x3. Some might be cut off or squeezed.")
     
-    fig = plt.figure(figsize=(figwidth_full, 1.8 * fig_height))
+    fig = plt.figure(figsize=(figwidth_full, 1.5 * fig_height))
     # Adjust width ratios: middle column (ART, Queue) narrower
     gs = fig.add_gridspec(2, 3, hspace=0.5, wspace=0.3, width_ratios=[1.1, 0.85, 1.1])
     
@@ -107,6 +107,10 @@ def plot_datastructures(df):
 
     palette_map = {'MTE': MTE_COLOR, 'CHERI': CHERI_COLOR}
     hatch_map = {'MTE': MTE_HATCH, 'CHERI': CHERI_HATCH}
+
+    # Will be populated from the first successfully rendered bar in each container
+    rendered_mte_color = MTE_COLOR
+    rendered_cheri_color = CHERI_COLOR
 
 
 
@@ -134,13 +138,13 @@ def plot_datastructures(df):
         
         if len(ax.containers) == 2:
             for bar in ax.containers[0]:
+                rendered_mte_color = bar.get_facecolor()  # capture before hatch changes
                 bar.set_hatch(MTE_HATCH)
                 bar.set_edgecolor('black')
             for bar in ax.containers[1]:
+                rendered_cheri_color = bar.get_facecolor()  # capture before hatch changes
                 bar.set_hatch(CHERI_HATCH)
                 bar.set_edgecolor('black')
-        else:
-            pass
 
         # Calculate stats for annotations and ylim
         stats = sys_data.groupby(['bench', 'expe'])['overhead'].agg(['mean', 'std']).reset_index()
@@ -196,16 +200,16 @@ def plot_datastructures(df):
         if sys.lower() == 'skiplist': caption = f"({chr(97+i)}) Skiplist."
         
         caption = r"\textbf{" + caption + "}"
-        ax.text(0.5, -0.27, caption, transform=ax.transAxes, ha='center', va='top', fontsize=FONTSIZE_TITLE)
+        ax.text(0.5, -0.3, caption, transform=ax.transAxes, ha='center', va='top', fontsize=FONTSIZE_TITLE)
         
         ax.set_xlabel('')
-        ax.set_ylabel('Normalized Runtime' if i % 3 == 0 else '', fontsize=FONTSIZE_AXIS_LABEL)
+        ax.set_ylabel('Runtime (norm.)' if i % 3 == 0 else '', fontsize=FONTSIZE_AXIS_LABEL)
         
         ax.tick_params(axis='x', labelsize=FONTSIZE_TICK_LABEL)
         ax.tick_params(axis='y', labelsize=FONTSIZE_TICK_LABEL)
         
         # Adjust Y limits based on max annotation height
-        ax.set_ylim(0.95, max(1.1, annot_max_y * 1.15))
+        ax.set_ylim(0.95, max(1.1, annot_max_y * 1.13))
         
         if ax.get_legend():
             ax.get_legend().remove()
@@ -251,24 +255,25 @@ def plot_datastructures(df):
     for k in range(len(systems), 6):
         axes[k].set_visible(False)
 
-    # Global Legend
+    # Global Legend — use the actual rendered bar facecolors so the swatches match exactly
     legend_patches = [
-        mpatches.Patch(facecolor=MTE_COLOR, hatch=MTE_HATCH, label='MTE', edgecolor='black'),
-        mpatches.Patch(facecolor=CHERI_COLOR, hatch=CHERI_HATCH, label='CHERI', edgecolor='black')
+        mpatches.Patch(facecolor=rendered_mte_color, hatch=MTE_HATCH, label='MTE', edgecolor='black', linewidth=1),
+        mpatches.Patch(facecolor=rendered_cheri_color, hatch=CHERI_HATCH, label='CHERI', edgecolor='black', linewidth=1)
     ]
     
     fig.legend(
         handles=legend_patches,
-        loc='upper center',
-        bbox_to_anchor=(0.5, 0.99),
+        loc='upper left',
+        bbox_to_anchor=(0.45, 0.99),
         ncol=2,
         fontsize=FONTSIZE_LEGEND,
         frameon=True
     )
     
-    fig.text(0.5, 0.915, lower_better_str, ha='center', va='top', color='blue', fontsize=FONTSIZE_TITLE)
+    fig.text(0.45, 0.96, lower_better_str, ha='right', va='top', color='blue', fontsize=FONTSIZE_TITLE)
     
-    plt.tight_layout(rect=[0, 0, 1, 0.93])
+    #plt.tight_layout(rect=[0, 0, 1, 0.93])
+    plt.tight_layout(rect=[0, 0, 0.95, 0.93])
     output_path = os.path.join(result_dir, "datastructures_all.pdf")
     plt.savefig(output_path, format='pdf', bbox_inches='tight')
     plt.close()

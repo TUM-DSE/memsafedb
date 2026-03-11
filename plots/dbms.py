@@ -80,8 +80,10 @@ def plot_bars_on_ax(ax, pivot, pivot_std, variants_to_plot, baseline_map, y_labe
     x = np.arange(len(pivot))
     total_width = 0.8 * bar_width_scale
     width = total_width / len(variants_to_plot)
-    print(total_width, width)
-    
+
+    ax.set_xlim(x[0] - 0.5, x[-1] + 0.5)
+    ax.autoscale(enable=False, axis='x')
+
     order_priority = ['release-dynamic', 'release', 'release-mte', 'release-asan', 'release-static', 'release-cheri']
     variants_to_plot = sorted(variants_to_plot, key=lambda v: order_priority.index(v) if v in order_priority else 999)
     local_style_map = style_map.copy()
@@ -99,7 +101,7 @@ def plot_bars_on_ax(ax, pivot, pivot_std, variants_to_plot, baseline_map, y_labe
         bars = ax.bar(
             x + offset,
             pivot[var],
-            width,
+            width=width,
             label=style['label'],
             color=style['color'],
             edgecolor='black',
@@ -177,7 +179,7 @@ def plot_bars_on_ax(ax, pivot, pivot_std, variants_to_plot, baseline_map, y_labe
         ax.annotate(
             indicator,
             color='blue',
-            xy=(0.02, 0.92),
+            xy=(0.02, 0.9),
             xycoords='axes fraction',
             fontsize=FONTSIZE_TITLE,
         )
@@ -353,7 +355,7 @@ def plot_all_systems(df: pd.DataFrame):
         lady_hatches.append(CHERI_HATCH)
 
     # --- Plotting ---
-    fig = plt.figure(figsize=(figwidth_full, 1.8 * fig_height))
+    fig = plt.figure(figsize=(figwidth_full, 1.5 * fig_height))
     gs_main = fig.add_gridspec(2, 1, hspace=0.5)
     
     # Row 1: Redis, LevelDB
@@ -376,17 +378,13 @@ def plot_all_systems(df: pd.DataFrame):
     
     # Plot content
     if p_redis is not None:
-        print("redis")
         plot_bars_on_ax(ax_redis, p_redis, ps_redis, v_redis, b_redis, 'Throughput (ops/sec)')
     if p_level is not None:
-        print("leveldb")
         plot_bars_on_ax(ax_level, p_level, ps_level, v_level, b_level, '') # No Y label
     if p_mysql is not None:
-        print("mysql")
         plot_bars_on_ax(ax_mysql, p_mysql, ps_mysql, v_mysql, b_mysql, 'Throughput (TPS)', show_x_labels=False, bar_width_scale=0.5)
     if p_sqlite is not None:
-        print("sqlite")
-        plot_bars_on_ax(ax_sqlite, p_sqlite, ps_sqlite, v_sqlite, b_sqlite, '', show_x_labels=False, bar_width_scale=0.5)
+        plot_bars_on_ax(ax_sqlite, p_sqlite, ps_sqlite, v_sqlite, b_sqlite, '', show_x_labels=False, bar_width_scale=0.6)
     
     plot_box(ax_duck, duck_data_list, duck_labels, duck_colors, duck_hatches)
     plot_box(ax_lady, lady_data_list, lady_labels, lady_colors, lady_hatches)
@@ -413,7 +411,7 @@ def plot_all_systems(df: pd.DataFrame):
     ]
     
     for ax, txt in captions:
-        ax.text(0.5, -0.27, txt, transform=ax.transAxes, ha='center', va='top', fontsize=FONTSIZE_TITLE, fontweight='bold')
+        ax.text(0.5, -0.3, txt, transform=ax.transAxes, ha='center', va='top', fontsize=FONTSIZE_TITLE, fontweight='bold')
     
     # We can fake the legend handles to ensure order and completeness
     dummy_handles = []
