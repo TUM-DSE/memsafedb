@@ -274,7 +274,7 @@ run_all_bugs:
     set -e
     mkdir -p {{ bugs_output_dir }}/bug_results
 
-    for dbms in "RocksDB" "MongoDB" "ClickHouse" "CockroachDB" "MariaDB" "MySQL" "Redis"  "LevelDB"; do
+    for dbms in "RocksDB" "DuckDB" "ClickHouse" "MariaDB" "MySQL" "Redis"  "LevelDB"; do
         START=$(date +%s)
         echo "--------------------------------------------------"
         echo "Processing $dbms"
@@ -569,8 +569,7 @@ run_all_cves:
     set -e
     mkdir -p {{ cve_dir }}/cve_results
 
-    # for dbms in "redis"; do
-    for dbms in "mysql" "sqlite" "mariadb" "redis" "leveldb" "rocksdb" "duckdb" "ladybug" "postgresql" "mongodb" "memcached" "influxdb" "redshift"; do
+    for dbms in "sqlite" "mariadb" "redis" "leveldb" "rocksdb" "duckdb" "ladybug" "postgresql" "mongodb" "memcached" "influxdb" "redshift" "mysql"; do
         START=$(date +%s)
         echo "--------------------------------------------------"
         echo "Processing CVEs for $dbms"

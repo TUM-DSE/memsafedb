@@ -19,8 +19,7 @@ from collections import defaultdict
 from datetime import datetime
 
 # Database list matching bugs.just
-DATABASES = ["DuckDB", "Redis", "RocksDB", "MongoDB", "ClickHouse", "CockroachDB", 
-             "MariaDB", "MySQL", "LevelDB"]
+DATABASES = ["DuckDB", "Redis", "RocksDB", "ClickHouse", "MySQL", "LevelDB", "MariaDB"]
 
 # Directory paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
