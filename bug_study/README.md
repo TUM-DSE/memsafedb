@@ -245,3 +245,167 @@ end_date_setting   := "2025-12-31"
 This range is applied at scraping time (bugs) and at classification time (CVEs and bugs).
 For CVEs, the export script additionally enforces this range when counting totals for the
 summary tables.
+
+---
+
+## End-to-End Walkthrough
+
+Complete sequence to go from nothing to all final results. Steps are ordered so that the
+server can be started once and both tracks can run against it.
+
+### 0 — Prerequisites
+
+```bash
+# Make sure you are in the bug_study directory for all commands below
+cd /scratch/dimitrios/memsafedb/bug_study
+```
+
+Ensure `just`, `docker`, `python3`, and `huggingface-cli` are available.
+Add your GitHub token to `tokens.txt` (see [API Tokens](#api-tokens)).
+
+---
+
+### 1 — Start the LLM Server
+
+> **Skip steps 1a and 1b** if the model is already downloaded (`models/` is populated)
+> and the Docker image is already built.
+
+**1a.** *(Optional)* Download the model explicitly:
+```bash
+just -f bugs.just download_model
+```
+
+**1b.** *(Optional)* Build the Docker image explicitly:
+```bash
+just -f bugs.just build_docker
+```
+
+**1c.** Start the server (runs 1a and 1b automatically if needed):
+```bash
+just -f bugs.just launch_server
+```
+
+The server is now listening on `http://localhost:8080`. Verify with:
+```bash
+curl http://localhost:8080/v1/models
+```
+
+---
+
+### 2 — Bug Track
+
+#### 2a. Scrape Bug Reports
+
+> **Skip this step** if you extracted `memsafedb_bugs/bug_list.tar.xz` — the scraped
+> bug JSON files are already in `memsafedb_bugs/<DBMS>/`.
+
+```bash
+tar -xf memsafedb_bugs/bug_list.tar.xz -C memsafedb_bugs/
+# — OR — scrape fresh:
+just -f bugs.just scrape_bugs
+```
+
+#### 2b. Classify Bugs (keyword search + 3× LLM)
+
+> **Skip this step** if you extracted `memsafedb_bugs/bug_results.tar.xz` — the
+> `bug_results/` directory with all rep files is already present.
+
+```bash
+tar -xf memsafedb_bugs/bug_results.tar.xz -C memsafedb_bugs/
+# — OR — run the full classification:
+just -f bugs.just run_all_bugs
+```
+
+This writes `memsafedb_bugs/bug_results/<DBMS>_rep{1,2,3}.json` and
+`memsafedb_bugs/bug_results/matches_<DBMS>.json` for every DBMS.
+
+#### 2c. Analyze Bug Results
+
+```bash
+# Analyze all DBMSes one by one (run once per DBMS, e.g. LevelDB, DuckDB, …)
+for db in RocksDB DuckDB ClickHouse MariaDB MySQL Redis LevelDB; do
+    just -f bugs.just analyse_bug_results "$db"
+done
+```
+
+Produces `memsafedb_bugs/bug_results/report_<DBMS>_part{1,2,3}.txt`.
+
+#### 2d. Export Bug Results to CSV
+
+```bash
+python3 export_bug_results_to_csv.py
+```
+
+Produces `memsafedb_bugs/bug_results_by_year.csv` and prints summary tables to stdout.
+
+---
+
+### 3 — CVE Track
+
+#### 3a. Fetch and Unzip the CVE Dataset
+
+> **Skip this step** if you already have `cve/cvelistV5-main/` extracted and the
+> `cve/<dbms>_cves` index files present.
+
+```bash
+# Download (~500 MB) and extract, then generate per-DBMS index files:
+just -f bugs.just scrape_cves
+```
+
+If the zip is already downloaded but not yet extracted/indexed, `scrape_cves` will skip
+the download automatically.
+
+#### 3b. Classify CVEs (keyword search + 3× LLM)
+
+> **Skip this step** if you extracted `cve/cve_results.tar.xz` — the `cve_results/`
+> directory with all rep files is already present.
+
+```bash
+tar -xf cve/cve_results.tar.xz -C cve/
+# — OR — run the full classification:
+just -f bugs.just run_all_cves
+```
+
+This writes `cve/cve_results/<dbms>_cve_rep{1,2,3}.json` and
+`cve/cve_results/matches_<dbms>_cve.json` for every DBMS.
+
+#### 3c. Analyze CVE Results
+
+```bash
+# Analyze all DBMSes and generate the cumulative report:
+just -f bugs.just analyse_cve_results all
+```
+
+Produces per-DBMS reports in `cve/cve_results/reports/` and
+`cve/cve_results/reports/cumulative_report.txt`.
+
+#### 3d. Export CVE Results to CSV
+
+```bash
+python3 export_cve_results_to_csv.py
+```
+
+Produces `cve/cve_results_by_year.csv` and prints summary tables to stdout.
+
+---
+
+### 4 — Stop the Server
+
+```bash
+just -f bugs.just kill_server
+```
+
+---
+
+### Summary of Output Files
+
+| File | Produced by |
+|---|---|
+| `memsafedb_bugs/<DBMS>/*.json` | Step 2a (scrape or extract `bug_list.tar.xz`) |
+| `memsafedb_bugs/bug_results/<DBMS>_rep{1,2,3}.json` | Step 2b (classify or extract `bug_results.tar.xz`) |
+| `memsafedb_bugs/bug_results/report_<DBMS>_part{N}.txt` | Step 2c |
+| `memsafedb_bugs/bug_results_by_year.csv` | Step 2d |
+| `cve/<dbms>_cves` | Step 3a |
+| `cve/cve_results/<dbms>_cve_rep{1,2,3}.json` | Step 3b (classify or extract `cve_results.tar.xz`) |
+| `cve/cve_results/reports/cumulative_report.txt` | Step 3c |
+| `cve/cve_results_by_year.csv` | Step 3d |
