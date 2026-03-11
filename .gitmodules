@@ -32,3 +32,6 @@
 [submodule "dbms/ycsb-cpp"]
 	path = dbms/ycsb-cpp
 	url = https://github.com/ls4154/YCSB-cpp.git
+[submodule "microbenchmarks"]
+	path = microbenchmarks
+	url = https://github.com/TUM-DSE/memsafedb-microbenchmarks.git
