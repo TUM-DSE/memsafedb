@@ -36,8 +36,8 @@ machines are assumed:
 
 | Machine    | Alias  | Architecture          | Extension |
 |------------|--------|-----------------------|-----------|
-| MTE host   | `eliza`| ARMv8.2 (Ampere 1a)   | MTE       |
-| CHERI host | `ace`  | ARMv8.5 (Morello)     | CHERI     |
+| MTE host   | `eliza`| ARMv8.6 (Ampere 1a)   | MTE       |
+| CHERI host | `ace`  | ARMv8.2 (Morello)     | CHERI     |
 
 Tasks are orchestrated with [`just`](https://github.com/casey/just):
 
