@@ -1,0 +1,263 @@
+name: Generate Docs
+
+on: workflow_dispatch
+
+jobs:
+  build-python-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package Python sdist
+        run: python package_tar.py
+        working-directory: scripts/pip-package
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        run: python -m pip install uv
+
+      - name: Install cibuildwheel
+        run: uv pip install cibuildwheel
+
+      - name: Build wheels
+        env:
+          CIBW_PLATFORM: linux
+          CIBW_BUILD: "cp310-*"
+          CIBW_ARCHS: "auto"
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
+          CIBW_SKIP: "*-musllinux_*"
+        run: |
+          python -m cibuildwheel --output-dir scripts/pip-package/wheelhouse scripts/pip-package/*.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lbug-python-package
+          path: scripts/pip-package/wheelhouse/*.whl
+
+  generate-python-docs:
+    runs-on: ubuntu-latest
+    needs: build-python-package
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Download Python package
+        uses: actions/download-artifact@v4
+        with:
+          name: lbug-python-package
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install Python packages
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install *.whl
+          uv pip install pdoc
+          uv pip install torch~=2.5.0 --extra-index-url https://download.pytorch.org/whl/cpu
+          uv pip install --prerelease=allow -e tools/python_api/[dev]
+
+      - name: Generate Python docs
+        run: |
+          mkdir docs
+          pdoc --docformat "numpy" -o docs real_ladybug
+
+      - name: Upload Python docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: lbug-python-docs
+          path: ./docs
+
+  generate-nodejs-docs:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Node.js packages
+        run: |
+          npm install -g jsdoc
+
+      - name: Generate Node.js docs
+        shell: bash
+        run: |
+          jsdoc ./tools/nodejs_api/src_js/*.js ./tools/nodejs_api/README.md --destination ./docs
+
+      - name: Upload Node.js docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: lbug-nodejs-docs
+          path: ./docs
+
+  generate-wasm-docs:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Node.js packages
+        run: |
+          npm install -g jsdoc
+
+      - name: Generate Node.js docs
+        shell: bash
+        run: |
+          mkdir docs
+          jsdoc ./tools/wasm/src_js/sync/*.js ./tools/wasm/src_js/sync/README.md --destination ./docs/sync
+          jsdoc ./tools/wasm/src_js/*.js ./tools/wasm/src_js/README.md --destination ./docs/async
+
+      - name: Upload Node.js docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: lbug-wasm-docs
+          path: ./docs
+
+  generate-java-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '20'
+          distribution: 'temurin'
+
+      - name: Generate Java docs
+        shell: bash
+        run: |
+          mkdir docs
+          cd docs && javadoc ../tools/java_api/src/main/java/com/lbugdb/*.java
+
+      - name: Upload Java docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: lbug-java-docs
+          path: ./docs
+
+  generate-cpp-docs:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Doxygen
+        run: brew install doxygen
+
+      - name: Generate C and C++ docs
+        shell: bash
+        working-directory: scripts/generate-cpp-docs/
+        run: |
+          chmod +x doxygen.sh
+          ./doxygen.sh
+
+      - name: Upload C++ docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: lbug-cpp-docs
+          path: ./scripts/generate-cpp-docs/cpp/docs/html
+
+      - name: Upload C docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: lbug-c-docs
+          path: ./scripts/generate-cpp-docs/c/docs/html
+
+  update-docs:
+    runs-on: ubuntu-22.04
+    needs: [
+      generate-python-docs,
+      generate-nodejs-docs,
+      generate-wasm-docs,
+      generate-java-docs,
+      generate-cpp-docs
+    ]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: LadybugDB/api-docs
+          token: ${{ secrets.DOC_PUSH_TOKEN }}
+          path: api-docs
+
+      - name: Remove old documentations
+        run: |
+          rm -rf api-docs/python
+          rm -rf api-docs/nodejs
+          rm -rf api-docs/wasm
+          rm -rf api-docs/java
+          rm -rf api-docs/cpp
+          rm -rf api-docs/c
+
+      - name: Download Python docs
+        uses: actions/download-artifact@v4
+        with:
+          name: lbug-python-docs
+          path: api-docs/python
+
+      - name: Download Node.js docs
+        uses: actions/download-artifact@v4
+        with:
+          name: lbug-nodejs-docs
+          path: api-docs/nodejs
+
+      - name: Download WASM docs
+        uses: actions/download-artifact@v4
+        with:
+          name: lbug-wasm-docs
+          path: api-docs/wasm
+
+      - name: Download Java docs
+        uses: actions/download-artifact@v4
+        with:
+          name: lbug-java-docs
+          path: api-docs/java
+
+      - name: Download C++ docs
+        uses: actions/download-artifact@v4
+        with:
+          name: lbug-cpp-docs
+          path: api-docs/cpp
+
+      - name: Download C docs
+        uses: actions/download-artifact@v4
+        with:
+          name: lbug-c-docs
+          path: api-docs/c
+
+      - name: Push changes
+        working-directory: api-docs
+        run: |
+          git checkout -b "api-documentation-update-${{ github.sha }}"
+          git config --global user.name "CI User"
+          git config --global user.email "ci@ladybugdb.com"
+          git add .
+          git commit -m "Update API documentations"
+          git push -u origin "api-documentation-update-${{ github.sha }}"
+
+      - name: Create pull request
+        working-directory: api-docs
+        run: |
+          echo "${{ secrets.DOC_PUSH_TOKEN }}" > token.txt
+          gh auth login --with-token < token.txt
+          rm -rf token.txt
+          gh pr create \
+            --body "Action triggered by CI workflow." \
+            --title "Update API documentations" \
+            --head "api-documentation-update-${{ github.sha }}" \
+            --base "main"

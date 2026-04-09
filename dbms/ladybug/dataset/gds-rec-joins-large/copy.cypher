@@ -1,0 +1,6 @@
+COPY person1 FROM "vPerson.csv"
+COPY person2 FROM "vPerson.csv"
+COPY knows11 FROM "vKnows.csv"
+COPY knows12 FROM "vKnows.csv"
+COPY knows21 FROM "vKnows.csv"
+COPY knows22 FROM "vKnows.csv"

@@ -1,0 +1,16 @@
+[package]
+name = "arch-tests"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.100"
+clap = { version = "4.5.51", features = ["derive"] }
+libc = "1.0.0-alpha.1"
+serde = { version = "1.0.188", features = ["derive"] }
+serde_json = "1.0.107"
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+
+[build-dependencies]
+cc = "1"

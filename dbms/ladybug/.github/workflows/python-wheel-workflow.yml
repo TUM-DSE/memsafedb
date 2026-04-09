@@ -1,0 +1,165 @@
+name: Build Python Wheels
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      isNightly:
+        type: boolean
+        required: true
+        default: false
+
+jobs:
+  package-python-sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        run: pip3 install uv
+
+      - name: Update nightly version
+        if: ${{ inputs.isNightly == true }}
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install packaging
+          python3 update-nightly-build-version.py
+        working-directory: scripts
+
+      - name: Package Python sdist
+        run: python package_tar.py
+        working-directory: scripts/pip-package
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-sdist
+          path: scripts/pip-package/*.tar.gz
+
+  build-linux-wheels:
+    needs: package-python-sdist
+    # The 'runs-on' key is now inside the matrix
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Job 1: Native x86_64 build
+          - platform: x86_64
+            runner: ubuntu-latest # This is the standard x86_64 runner
+            os: linux
+            manylinux: _2_28
+            deployment-target: ''
+
+          # Job 2: Native aarch64 build
+          - platform: aarch64
+            runner: ubuntu-22.04-arm # This is a native ARM64 runner
+            os: linux
+            manylinux: _2_28
+            deployment-target: ''
+
+          # Job 3: macOS arm64 build
+          - platform: arm64
+            runner: macos-latest
+            os: macos
+            deployment-target: '11.0'
+
+          # Job 4: macOS x86_64 build
+          - platform: x86_64
+            runner: macos-15-intel
+            os: macos
+            deployment-target: '10.15'
+
+          # Job 5: Windows amd64 build
+          - platform: amd64
+            runner: windows-2022
+            os: windows
+            deployment-target: ''
+
+          # Job 6: Windows arm64 build
+          - platform: arm64
+            runner: windows-11-arm
+            os: windows
+            deployment-target: ''
+
+    env:
+      CIBW_PLATFORM: ${{ matrix.os }}
+      CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-*"
+
+      # Let CIBW detect the arch from the runner
+      CIBW_ARCHS: ${{ matrix.os == 'windows' && 'AMD64' || 'auto' }}
+
+      # Set the manylinux image based on the detected arch (Linux only)
+      CIBW_MANYLINUX_X86_64_IMAGE: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || '' }}
+      CIBW_MANYLINUX_AARCH64_IMAGE: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || '' }}
+
+      # Set deployment target for macOS, and Windows MSVC setup
+      CIBW_ENVIRONMENT_WINDOWS: DISTUTILS_USE_SDK=1 MSSdk=1
+      CIBW_ENVIRONMENT_MACOS: ${{ matrix.os == 'macos' && format('MACOSX_DEPLOYMENT_TARGET={0}', matrix.deployment-target) || '' }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download sdist
+        uses: actions/download-artifact@v4
+        with:
+          name: python-sdist
+          path: scripts/pip-package/
+
+      - name: Find sdist file
+        shell: bash
+        run: echo "SDIST_FILE=$(ls scripts/pip-package/*.tar.gz)" >> $GITHUB_ENV
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        run: python -m pip install uv
+
+      - name: Update nightly version
+        if: ${{ inputs.isNightly == true }}
+        shell: bash
+        run: |
+          uv venv
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            source .venv/Scripts/activate
+          else
+            source .venv/bin/activate
+          fi
+          uv pip install packaging
+          python update-nightly-build-version.py
+        working-directory: scripts
+
+      - name: Install cibuildwheel
+        if: matrix.os != 'windows'
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install cibuildwheel
+
+      - name: Build wheels on ${{ matrix.platform }} (Windows)
+        if: matrix.os == 'windows'
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          pipx run --spec cibuildwheel cibuildwheel %SDIST_FILE% --output-dir scripts\pip-package\wheelhouse
+
+      - name: Build wheels on ${{ matrix.platform }} (Linux/macOS)
+        if: matrix.os != 'windows'
+        shell: bash
+        run: |
+          uv venv
+          source .venv/bin/activate
+          uv pip install cibuildwheel
+          python -m cibuildwheel --output-dir scripts/pip-package/wheelhouse ${{ env.SDIST_FILE }}
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os == 'linux' && format('manylinux{0}', matrix.manylinux) || matrix.os }}-wheels-${{ matrix.platform }}
+          path: ./scripts/pip-package/wheelhouse/*.whl

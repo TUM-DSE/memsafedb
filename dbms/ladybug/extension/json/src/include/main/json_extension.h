@@ -1,0 +1,19 @@
+#pragma once
+
+#include "extension/extension.h"
+
+namespace lbug {
+namespace json_extension {
+
+class JsonExtension final : public extension::Extension {
+public:
+    static constexpr char EXTENSION_NAME[] = "JSON";
+
+public:
+    static constexpr common::idx_t JSON_SCAN_FILE_IDX = 0;
+
+    static void load(main::ClientContext* context);
+};
+
+} // namespace json_extension
+} // namespace lbug

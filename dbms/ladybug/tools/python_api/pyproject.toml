@@ -1,0 +1,135 @@
+[project]
+name = "real_ladybug"
+description = "Highly scalable, extremely fast, easy-to-use embeddable graph database"
+readme = "README.md"
+license = { text = "MIT" }
+keywords = ["graph", "database"]
+version = "0.0.1"
+
+[project.urls]
+Homepage = "https://ladybugdb.com/"
+Documentation = "https://docs.ladybugdb.com/"
+Repository = "https://github.com/lbugdb/lbug"
+Changelog = "https://github.com/LadybugDB/ladybug/releases"
+
+[project.optional-dependencies]
+dev = [
+    "networkx~=3.0",
+    "numpy~=2.0",
+    "pandas~=2.2",
+    "polars~=1.30",
+    "pyarrow~=20.0",
+    "pybind11~=2.13",
+    "pytest",
+    "pytest-asyncio~=1.0",
+    "setuptools~=80.9",
+    "ruff==0.11.12",
+    "mypy==1.16.0",
+    "torch>=2.5.0",
+    "torch-geometric>=2.5.0",
+]
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+
+[[tool.uv.index]]
+name = "torch-geometric"
+url = "https://data.pyg.org/whl/torch-2.5.0+cpu/"
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[tool.uv]
+index-strategy = "unsafe-best-match"
+
+[tool.mypy]
+files = ["src_py", "test"]
+strict = true
+enable_error_code = [
+  "redundant-expr",
+  "truthy-bool",
+  "ignore-without-code",
+]
+disable_error_code = [
+  "import-not-found",
+  "no-any-return",
+]
+
+[[tool.mypy.overrides]]
+module = [
+  "_lbug.*",
+  "networkx.*",
+  "pandas.*",
+  "pyarrow.*",
+  "pytz.*",
+  "torch_geometric.*",
+]
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 119
+preview = true
+fix = true
+
+[tool.ruff.lint]
+select = [
+  "E", # pycodestyle
+  "W", # pycodestyle
+  "F", # Pyflakes
+  "B", # flake8-bugbear
+  "C4", # flake8-comprehensions
+  "D", # flake8-docstrings
+  "D213", # Augment NumPy docstring convention: Multi-line docstring summary should start at the second line
+  "D417", # Augment NumPy docstring convention: Missing argument descriptions
+  "I", # isort
+  "SIM", # flake8-simplify
+  "TCH", # flake8-type-checking
+  "TID", # flake8-tidy-imports
+  "UP", # pyupgrade
+  "PT", # flake8-pytest-style
+  "RUF", # Ruff-specific rules
+  "PTH", # flake8-use-pathlib
+  "FA", # flake8-future-annotations
+  "PIE", # flake8-pie
+  "TD", # flake8-todos
+  "TRY", # tryceratops
+  "EM", # flake8-errmsg
+  "FBT001", # flake8-boolean-trap
+]
+ignore = [
+  "D105", # Missing docstring in magic method
+  "D100", # Missing docstring in public module
+  "D104", # Missing docstring in public package
+  "D205", # 1 blank line required between summary line and description
+  "TD002", # Missing author in TODO
+  "TD003", # Missing issue link on the line following TODO
+]
+
+[tool.ruff.lint.per-file-ignores]
+"test/**/*.py" = ["D100", "D102", "D103", "E501", "F841", "TCH002"]
+"src_py/torch_geo*.py" = ["E501", "FBT001"]
+
+[tool.ruff.lint.pycodestyle]
+max-doc-length = 119
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.flake8-type-checking]
+strict = true
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.setuptools.packages.find]
+where = ["src_py", "build"]
+exclude = ["src_cpp*"]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

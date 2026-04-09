@@ -1,0 +1,11 @@
+-DATASET CSV empty
+
+--
+
+-CASE LargeHeader
+-STATEMENT CALL threads=1;
+---- ok
+
+-STATEMENT LOAD FROM "${LBUG_ROOT_DIRECTORY}/dataset/csv-edge-case-tests/large-header.csv" (HEADER=TRUE) RETURN *;
+---- 1
+data|data2

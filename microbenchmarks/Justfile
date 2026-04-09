@@ -1,0 +1,127 @@
+export LC_ALL := "C"
+set shell := ["bash", "-cu"]
+
+# Paths
+c_benches_dir := "c_benches"
+insts_dir     := "insts"
+results_root  := "results"
+
+# Remote settings
+remote_host_morello := "ace.dos.cit.tum.de"
+remote_host_x86 := "xavier.dos.cit.tum.de"
+remote_host_gravitron := "admin@52.59.207.12"
+remote_tmp_template := "/tmp/microbench.XXXXXXX"
+
+default: help
+
+help:
+    @just --list
+
+check-tools:
+    @command -v ssh >/dev/null || { echo "ssh not found"; exit 1; }
+    @command -v rsync >/dev/null || { echo "rsync not found"; exit 1; }
+
+sync_to_morello: check-tools
+    #!/usr/bin/env -S bash -euo pipefail
+    REMOTE_TMP=$(ssh {{remote_host_morello}} "mktemp -d {{remote_tmp_template}}")
+    echo "Syncing project to {{remote_host_morello}}:${REMOTE_TMP}" >&2
+    rsync -a --delete \
+      ./c_benches/build ./insts/target/aarch64-unknown-linux-musl/release/arch-tests ./scripts {{remote_host_morello}}:"${REMOTE_TMP}"/
+    printf '%s\n' "${REMOTE_TMP}"
+
+build_c_benches:
+    cd {{c_benches_dir}} && make -j
+    # patchelf --set-interpreter /lib/ld-linux-aarch64.so.1 ./c_benches/build/ptr_chase_normal
+    # patchelf --set-interpreter /lib/ld-linux-aarch64.so.1 ./c_benches/build/ptr_chase_purecap
+    # patchelf --set-interpreter /lib/ld-linux-aarch64.so.1 ./c_benches/build/memcpy_normal
+    # patchelf --set-interpreter /lib/ld-linux-aarch64.so.1 ./c_benches/build/memcpy_purecap
+    # patchelf --set-interpreter /lib/ld-linux-aarch64.so.1 ./c_benches/build/memset_normal
+    # patchelf --set-interpreter /lib/ld-linux-aarch64.so.1 ./c_benches/build/memset_purecap
+    # patchelf --set-interpreter /lib/ld-linux-aarch64.so.1 ./c_benches/build/memread_normal
+    # patchelf --set-interpreter /lib/ld-linux-aarch64.so.1 ./c_benches/build/memread_purecap
+    # patchelf --set-interpreter /lib/ld-linux-aarch64.so.1 ./c_benches/build/mte_caches
+    # patchelf --set-interpreter /lib/ld-linux-aarch64.so.1 ./c_benches/build/cheri_caches
+
+build_insts:
+    cd {{insts_dir}} && cargo build --target aarch64-unknown-linux-musl --release && cargo build --target x86_64-unknown-linux-gnu --release
+    patchelf --set-interpreter /lib64/ld-linux-x86-64.so.2 ./insts/target/x86_64-unknown-linux-gnu/release/arch-tests
+    # patchelf --set-interpreter /lib/ld-linux-aarch64.so.1 ./insts/target/aarch64-unknown-linux-musl/release/arch-tests
+
+build: build_c_benches build_insts
+
+clean:
+    rm -rf "{{results_root}}"
+    cd {{c_benches_dir}} && make clean
+    cd {{insts_dir}} && cargo clean
+
+# Local evaluation on MTE machine
+run_on_mte: build
+    ./scripts/eval_mte.sh
+
+# Remote evaluation on Morello machine
+run_on_morello: build check-tools
+    #!/usr/bin/env -S bash -euo pipefail
+    REMOTE_TMP=$(just --justfile "{{justfile_directory()}}/Justfile" --quiet sync_to_morello)
+    echo "Building and running on {{remote_host_morello}}"
+    ssh {{remote_host_morello}} "cd ${REMOTE_TMP} && ./scripts/eval_morello.sh"
+    echo "Fetching results from {{remote_host_morello}}"
+    mkdir -p "{{results_root}}/morello"
+    rsync -a {{remote_host_morello}}:"${REMOTE_TMP}"/{{results_root}}/ "{{results_root}}/morello/"
+
+copy_to_morello_and_ssh: build check-tools
+    #!/usr/bin/env -S bash -euo pipefail
+    REMOTE_TMP=$(just --justfile "{{justfile_directory()}}/Justfile" --quiet sync_to_morello)
+    echo "Opening shell on {{remote_host_morello}}:${REMOTE_TMP}"
+    ssh -t {{remote_host_morello}} "cd ${REMOTE_TMP} && exec "'$'"0 -l"
+
+# Remote evaluation on Gravitron machine
+run_on_gravitron: build check-tools
+    @echo "Syncing project to {{remote_host_gravitron}}:{{remote_tmp_template}}"
+    REMOTE_TMP=$(ssh {{remote_host_gravitron}} "mktemp -d {{remote_tmp_template}}") && \
+    echo "using {{remote_host_gravitron}}:$REMOTE_TMP" && \
+    rsync -a --delete \
+      ./c_benches/build ./insts/target/aarch64-unknown-linux-musl/release/arch-tests ./scripts {{remote_host_gravitron}}:"${REMOTE_TMP}"/ && \
+    echo "Building and running on {{remote_host_gravitron}}" && \
+    ssh {{remote_host_gravitron}} "cd ${REMOTE_TMP} && ./scripts/eval_gravitron.sh" && \
+    echo "Fetching results from {{remote_host_gravitron}}" && \
+    mkdir -p "{{results_root}}/gravitron" && \
+    rsync -a {{remote_host_gravitron}}:"${REMOTE_TMP}"/{{results_root}}/ "{{results_root}}/gravitron/"
+
+# Remote evaluation on x86 machine
+run_on_x86: build check-tools
+        @echo "Syncing project to {{remote_host_x86}}:{{remote_tmp_template}}"
+        REMOTE_TMP=$(ssh {{remote_host_x86}} "mktemp -d {{remote_tmp_template}}") && \
+        echo "using {{remote_host_x86}}:$REMOTE_TMP" && \
+        rsync -a --delete \
+          ./c_benches/build ./insts/target/x86_64-unknown-linux-gnu/release/arch-tests ./scripts {{remote_host_x86}}:"${REMOTE_TMP}"/ && \
+        echo "Building and running on {{remote_host_x86}}" && \
+        ssh {{remote_host_x86}} "cd ${REMOTE_TMP} && ./scripts/eval_x86.sh" && \
+        echo "Fetching results from {{remote_host_x86}}" && \
+        mkdir -p "{{results_root}}/x86" && \
+        rsync -a {{remote_host_x86}}:"${REMOTE_TMP}"/{{results_root}}/ "{{results_root}}/x86/"
+
+[parallel]
+run_eval: run_on_mte run_on_morello run_on_gravitron run_on_x86
+
+plot:
+    rm -rf output
+    mkdir -p output
+    ./plot_scripts/inst_table.py ./results/mte/insts_mte.json > output/insts_mte.tex & \\
+    ./plot_scripts/inst_table.py ./results/morello/insts_morello.json > output/insts_morello.tex & \\
+    ./plot_scripts/inst_table.py ./results/x86/insts_x86.json > output/insts_x86.tex & \\
+    ./plot_scripts/plot_c_bench.py -o output/ptr_chase_morello --color-scheme non-mte --variants "AArch64,Purecap" --x-axis pow2 ./results/morello/ptr_chase_{normal,purecap}.csv & \\
+    ./plot_scripts/plot_c_bench.py -o output/atomic_ptr_table_morello --color-scheme non-mte --variants "AArch64,Purecap" --x-axis pow2 ./results/morello/atomic_ptr_table_{normal,purecap}.csv & \\
+    ./plot_scripts/plot_c_bench.py -o output/ptr_chase_mte --color-scheme mte --variants "Off,Sync,Async,No Tagging,Prctl Only" --x-axis pow2 ./results/mte/ptr_chase_{no,sync,async,no_tagging,prctl_only}_mte.csv & \\
+    ./plot_scripts/plot_c_bench.py -o output/memcpy_morello --color-scheme non-mte --show-legend --variants "AArch64,Purecap" ./results/morello/memcpy_{normal,purecap}.csv & \\
+    ./plot_scripts/plot_c_bench.py -o output/memcpy_mte --color-scheme mte --variants "Off,Sync,Async,No Tagging,Prctl Only" ./results/mte/memcpy_{no,sync,async,no_tagging,prctl_only}_mte.csv & \\
+    ./plot_scripts/plot_c_bench.py -o output/memset_morello --color-scheme non-mte --variants "AArch64,Purecap" ./results/morello/memset_{normal,purecap}.csv & \\
+    ./plot_scripts/plot_c_bench.py -o output/memset_mte --color-scheme mte --variants "Off,Sync,Async,No Tagging,Prctl Only" ./results/mte/memset_{no,sync,async,no_tagging,prctl_only}_mte.csv & \\
+    ./plot_scripts/plot_c_bench.py -o output/memread_morello --color-scheme non-mte --variants "AArch64,Purecap" ./results/morello/memread_{normal,purecap}.csv & \\
+    ./plot_scripts/plot_c_bench.py -o output/memread_mte --color-scheme mte --show-legend --variants "Off,Sync,Async,No Tagging,Prctl Only" ./results/mte/memread_{no,sync,async,no_tagging,prctl_only}_mte.csv & \\
+    ./plot_scripts/mte_caches.py -o output/mte_caches --color-scheme mte ./results/mte/mte_caches.txt & \\
+    ./plot_scripts/mte_caches.py -o output/cheri_caches --color-scheme non-mte ./results/morello/cheri_caches.txt & \\
+    ./plot_scripts/plot_cheri_narrow_bounds.py -o output/cheri_narrow_bounds --labels "no narrowing,narrowing" ./results/morello/narrow_base.csv ./results/morello/narrow_cheri.csv & \
+    ./plot_scripts/plot_cheri_ldxr_stxr.py -o output/cheri_ldxr_stxr ./results/morello/cheri_ldxr_stxr.csv & \
+    ./plot_scripts/plot_mte_alloc.py -o output/mte_alloc --labels "no MTE,MTE" ./results/mte/mte_alloc_default.csv ./results/mte/mte_alloc_tagging.csv & \
+    ./plot_scripts/perf_to_latex.py ./results/mte/perf_ctrs.txt > output/mte_perf_ctrs.tex & \
+    wait $(jobs -p)

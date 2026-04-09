@@ -1,0 +1,5 @@
+COPY animal FROM "vAnimal.csv"
+COPY person FROM "vPerson.csv"
+COPY knows FROM "eKnows.csv"
+COPY hasOwner FROM "eHasOwner.csv"
+COPY teaches FROM "eTeaches.csv"

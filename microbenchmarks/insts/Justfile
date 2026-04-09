@@ -1,0 +1,37 @@
+export LC_ALL := "C"
+set shell := ["bash", "-cu"]
+
+check: lint
+
+# Bump all deps, including incompatible version upgrades
+bump:
+    just ensure_installed upgrade
+    cargo update
+    cargo upgrade --incompatible
+
+lint:
+    just ensure_installed sort
+    @echo "\033[1;34m📝 Checking code formatting...\033[0m"
+    cargo fmt --all -- --check
+    cargo sort --workspace --check
+    @echo "\033[1;35m🔍 Running Clippy on all targets...\033[0m"
+    cargo clippy --target aarch64-unknown-linux-gnu --tests --benches --workspace -- -D warnings
+
+fix:
+    @echo "\033[1;34m📝 Fixing clippy warnings...\033[0m"
+    cargo clippy --target aarch64-unknown-linux-gnu --tests --benches --workspace --fix --allow-staged
+
+alias fmt := format
+format:
+    just ensure_installed sort
+    cargo fmt
+    @echo "\033[1;34m📝 Fixing code formatting...\033[0m"
+    cargo sort --workspace
+
+ensure_installed *args:
+    #!/usr/bin/env bash
+    cargo --list | grep -q {{ args }}
+    if [[ $? -ne 0 ]]; then
+        echo "error: cargo-{{ args }} is not installed"
+        exit 1
+    fi

@@ -1,0 +1,14 @@
+-NAME q33
+-QUERY MATCH (n:Person {ID: 933})-[r:knows]->(friend) RETURN friend.ID AS personId, friend.firstName AS firstName, friend.lastName AS lastName, r.creationDate AS friendshipCreationDate ORDER BY friendshipCreationDate DESC, personId ASC
+---- 16
+10995116325562|Tibor|Toth|2010-12-12 00:26:22.267
+10995116345403|Emil|Kovacs|2010-12-19 23:04:23.095
+15393162832932|George|Mizzi|2011-04-21 19:24:36.003
+17592186072140|Imtiaz|Khan|2011-06-09 00:10:38.117
+26388279080230|Friedrich|Engel|2012-03-05 03:12:27.514
+36226|Wolfgang|Richter|2010-02-27 20:33:30.736
+51934|Carl|Nilsson|2010-03-02 19:40:10.029
+6597069780295|Djibril Diop|Dia|2010-07-22 15:50:11.224
+6597069815834|Angel|Sanchez|2010-09-03 11:36:48.951
+6597069816195|Hermann|Schmidt|2010-08-17 14:57:07.986
+8796093058058|Antonio|Sanchez|2010-11-03 15:40:06.862

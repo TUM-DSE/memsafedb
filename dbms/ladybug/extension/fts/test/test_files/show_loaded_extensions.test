@@ -1,0 +1,23 @@
+-DATASET CSV empty
+
+--
+
+-CASE show_loaded_extensions
+-SKIP_STATIC_LINK
+-LOAD_DYNAMIC_EXTENSION fts
+-STATEMENT CALL SHOW_LOADED_EXTENSIONS() RETURN *
+---- 1
+FTS|USER|${LBUG_ROOT_DIRECTORY}/extension/fts/build/libfts.lbug_extension
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/duckdb/build/libduckdb.lbug_extension"
+---- ok
+-STATEMENT CALL SHOW_LOADED_EXTENSIONS() RETURN *
+---- 2
+FTS|USER|${LBUG_ROOT_DIRECTORY}/extension/fts/build/libfts.lbug_extension
+DUCKDB|USER|${LBUG_ROOT_DIRECTORY}/extension/duckdb/build/libduckdb.lbug_extension
+-STATEMENT load extension "${LBUG_ROOT_DIRECTORY}/extension/httpfs/build/libhttpfs.lbug_extension"
+---- ok
+-STATEMENT CALL SHOW_LOADED_EXTENSIONS() RETURN *
+---- 3
+FTS|USER|${LBUG_ROOT_DIRECTORY}/extension/fts/build/libfts.lbug_extension
+DUCKDB|USER|${LBUG_ROOT_DIRECTORY}/extension/duckdb/build/libduckdb.lbug_extension
+HTTPFS|USER|${LBUG_ROOT_DIRECTORY}/extension/httpfs/build/libhttpfs.lbug_extension

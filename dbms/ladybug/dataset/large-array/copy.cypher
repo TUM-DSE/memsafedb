@@ -1,0 +1,1 @@
+COPY person FROM "large_array.parquet";

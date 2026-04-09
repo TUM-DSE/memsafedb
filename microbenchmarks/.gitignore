@@ -1,0 +1,8 @@
+/target
+.idea
+.direnv/
+/*.json
+output/
+**/__pycache__
+.envrc
+
