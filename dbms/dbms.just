@@ -1,6 +1,6 @@
 dbms_basedir := source_dir()
 
-CHERI_HOST := "ace.dos.cit.tum.de"
+CHERI_HOST := "[redacted]"
 user := `whoami`
 DATA_DIR := "/scratch/"+user+"/memsafedb/data"
 

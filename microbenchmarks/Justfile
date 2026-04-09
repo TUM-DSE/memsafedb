@@ -7,9 +7,9 @@ insts_dir     := "insts"
 results_root  := "results"
 
 # Remote settings
-remote_host_morello := "ace.dos.cit.tum.de"
-remote_host_x86 := "xavier.dos.cit.tum.de"
-remote_host_gravitron := "admin@52.59.207.12"
+remote_host_morello := "[redacted]"
+remote_host_x86 := "[redacted]"
+remote_host_gravitron := "[redacted]"
 remote_tmp_template := "/tmp/microbench.XXXXXXX"
 
 default: help
