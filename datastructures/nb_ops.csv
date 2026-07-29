@@ -95,3 +95,14 @@ eliza,skiplist,YCSB-E,1,1000000
 eliza,skiplist,insert,1,1000000
 eliza,skiplist,read,1,3000000
 eliza,skiplist,scan,1,1000000
+eliza,btree,read,8,50000000
+eliza,btree,read,64,50000000
+eliza,btree,insert,8,50000000
+eliza,btree,insert,64,50000000
+eliza,btree,update,8,50000000
+eliza,btree,update,64,50000000
+eliza,btree,scan,8,50000000
+eliza,btree,scan,64,50000000
+eliza,CLHT,read,8,50000000
+eliza,CLHT,insert,8,50000000
+eliza,queue,queue_bench,8,75000000

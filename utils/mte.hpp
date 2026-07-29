@@ -1,4 +1,4 @@
-ifndef MTE_UTILS_HPP
+#ifndef MTE_UTILS_HPP
 #define MTE_UTILS_HPP
 
 #ifdef MTE

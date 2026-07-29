@@ -251,6 +251,10 @@ namespace BTree {
     void unfixS(PID pid);
 
     bool isValidPtr(void* page) { return (page >= virtMem) && (page < (virtMem + virtSize + 16)); }
+    // an optimistic reader can derive a PID from a page that is being modified
+    // concurrently, so the value must be range-checked before it indexes
+    // pageState[] or is turned into a pointer
+    bool isValidPID(PID pid) { return pid < virtCount; }
     PID toPID(void* page) { 
     #ifdef MTE
       uintptr_t addr = reinterpret_cast<uintptr_t>(page) & addr_mask;
@@ -294,6 +298,10 @@ namespace BTree {
 
       template<class T2>
         GuardO(u64 pid, GuardO<T2>& parent)  {
+          // the pid was read optimistically from the parent, so it may be
+          // garbage; restart rather than dereference it
+          if (!bm.isValidPID(pid) && std::uncaught_exceptions()==0)
+            throw OLCRestartException();
           parent.checkVersionAndRestart();
           this->pid = pid;
           ptr = reinterpret_cast<T*>(bm.toPtr(pid));
@@ -745,6 +753,10 @@ namespace BTree {
       };
 
       static constexpr unsigned maxKVSize = ((pageSize - sizeof(BTreeNodeHeader) - (2 * sizeof(Slot)))) / 4;
+      static constexpr u16 maxSlots = (pageSize - sizeof(BTreeNodeHeader)) / sizeof(Slot);
+      // count is read without a lock, so a concurrent writer can expose a value
+      // larger than the slot array; clamp before it drives a search
+      u16 safeCount() { u16 c = count; return c < maxSlots ? c : maxSlots; }
 
       BTreeNode(bool isLeaf) : BTreeNodeHeader(isLeaf) { dirty = true; }
 
@@ -760,6 +772,23 @@ namespace BTree {
       bool hasSpaceFor(unsigned keyLen, unsigned payloadLen)
       {
         return spaceNeeded(keyLen, payloadLen) <= freeSpaceAfterCompaction();
+      }
+
+      // A slot read without a lock can hold an offset past the end of the page.
+      // Following it is merely a wrong read on aarch64 (the address still lands
+      // in the buffer pool), but under purecap toPtr() bounds the capability to
+      // exactly one page, so it is a fatal bounds violation. Readers validate
+      // and restart instead.
+      bool slotInPage(unsigned slotId) {
+        unsigned end = unsigned(slot[slotId].offset) + slot[slotId].keyLen + slot[slotId].payloadLen;
+        return (slot[slotId].offset >= sizeof(BTreeNodeHeader)) && (end <= pageSize);
+      }
+      void checkSlotOrRestart(unsigned slotId) {
+        if (!slotInPage(slotId) && std::uncaught_exceptions()==0)
+          throw OLCRestartException();
+      }
+      bool fenceInPage(FenceKeySlot f) {
+        return (unsigned(f.offset) + f.len) <= pageSize;
       }
 
       u8* getKey(unsigned slotId) { return ptr() + slot[slotId].offset; }
@@ -811,12 +840,14 @@ namespace BTree {
       {
         foundExactOut = false;
 
-        // check prefix
+        // check prefix -- the fence slot is read without a lock too
+        if (!fenceInPage(lowerFence) && std::uncaught_exceptions()==0)
+          throw OLCRestartException();
         int cmp = memcmp(skey.data(), getPrefix(), min(skey.size(), prefixLen));
         if (cmp < 0) // key is less than prefix
           return 0;
         if (cmp > 0) // key is greater than prefix
-          return count;
+          return safeCount();
         if (skey.size() < prefixLen) // key is equal but shorter than prefix
           return 0;
         u8* key = skey.data() + prefixLen;
@@ -824,7 +855,7 @@ namespace BTree {
 
         // check hint
         u16 lower = 0;
-        u16 upper = count;
+        u16 upper = safeCount();
         u32 keyHead = head(key, keyLen);
         searchHint(keyHead, lower, upper);
 
@@ -836,6 +867,7 @@ namespace BTree {
           } else if (keyHead > slot[mid].head) {
             lower = mid + 1;
           } else { // head is equal, check full key
+            checkSlotOrRestart(mid);
             int cmp = memcmp(key, getKey(mid), min(keyLen, slot[mid].keyLen));
             if (cmp < 0) {
               upper = mid;
@@ -1120,8 +1152,9 @@ namespace BTree {
       PID lookupInner(span<u8> key)
       {
         unsigned pos = lowerBound(key);
-        if (pos == count)
+        if (pos >= safeCount())
           return upperInnerNode;
+        checkSlotOrRestart(pos);
         return getChild(pos);
       }
     };

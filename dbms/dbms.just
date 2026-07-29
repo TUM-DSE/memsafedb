@@ -42,28 +42,43 @@ build_duckdb:
   cd {{dbms_basedir}}/duckdb
   #  ARCH="cheri" DUCKDB_PLATFORM=linux_arm64_musl EXTENSION_STATIC_BUILD=1 DISABLE_PARQUET=1 DISABLE_CPP_UNITTESTS=1 make -j release
   #  # cmake ../.. -DCMAKE_TOOLCHAIN_FILE=../../../../utils/morello-toolchain.cmake -DCMAKE_BUILD_TYPE=Release -DDISABLE_UNITY=1 -DBUILD_EXTENSIONS="" -DBUILD_UNITTESTS=OFF -DBUILD_SHELL=ON -DENABLE_SANITIZER=OFF -DENABLE_UBSAN=OFF
-  ARCH="mte" make -j release
+  # Pin glibc-mte's ld.so so MTE heap-tagged pointers survive syscalls (see leveldb).
+  if [[ -z "${GLIBC_MTE:-}" ]]; then echo "Error: GLIBC_MTE unset (run in the eliza/cross-compiler devshell)"; exit 1; fi
+  ARCH="mte" EXTRA_CMAKE_VARIABLES="-DCMAKE_EXE_LINKER_FLAGS=-Wl,--dynamic-linker=$GLIBC_MTE/lib/ld-linux-aarch64.so.1" make -j release
   ARCH="aarch64" make -j release
 
 setup_duckdb sf="100":
   #!/usr/bin/env bash
-  # Note: this only works for 1, 3, 10, 30, 100, 300, 1000 and 3000 (refer to https://duckdb.org/docs/stable/core_extensions/tpch#pre-generated-datasets)
-  # otherwise we need to generate them ourselves
-  if [[ ! -e tpch-sf{{sf}}.db ]]; then
-    wget https://blobs.duckdb.org/data/tpch-sf{{sf}}.db
+  set -euo pipefail
+  # Pre-generated SFs only: 1, 3, 10, 30, 100, 300, 1000, 3000.
+  target="{{DATA_DIR}}/tpch-sf{{sf}}.db"
+  if [[ -f "${target}" && $(stat -c%s "${target}") -gt 1000000 ]]; then
+    exit 0
   fi
-  mv tpch-sf{{sf}}.db {{DATA_DIR}}
+  mkdir -p "{{DATA_DIR}}"
+  wget -O "${target}" https://blobs.duckdb.org/data/tpch-sf{{sf}}.db
 
 # Run TPC-H for duckdb
-run_duckdb sf="100" monitor="false": #(setup_duckdb sf)
+run_duckdb sf="100" threads="0" monitor="false":
   #!/usr/bin/env bash
   set -eu pipefail
+
+  just dbms::setup_duckdb "{{sf}}"
 
   if [[ "{{monitor}}" == "true" ]]; then
     result_dir="{{dbms_basedir}}/../results/dbms_rss"
     mkdir -p "${result_dir}"
     PAGE_SIZE=$(getconf PAGESIZE)
     echo "variant,phase,query,peak_rss_bytes" > "${result_dir}/duckdb_mem_footprint.csv"
+  fi
+
+  # threads=0 keeps DuckDB's default (all cores); otherwise pin + cap intra-query parallelism.
+  if [ "{{threads}}" != "0" ]; then
+    tsk="taskset -c 0-$(({{threads}} - 1))"
+    dthreads=(-c "SET threads TO {{threads}}")
+  else
+    tsk=""
+    dthreads=()
   fi
 
   run_cmd() {
@@ -117,11 +132,11 @@ run_duckdb sf="100" monitor="false": #(setup_duckdb sf)
     echo "=== Running dynamic variant ===" >&2
     for q in `seq 1 22`
     do
-      run_cmd "warm" "dynamic" "$q" {{dbms_basedir}}/duckdb/build/release-dynamic/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" > /dev/null 2>&1
+      run_cmd "warm" "dynamic" "$q" $tsk {{dbms_basedir}}/duckdb/build/release-dynamic/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' ${dthreads[@]+"${dthreads[@]}"} -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" > /dev/null 2>&1
     done
     for q in `seq 1 22`
     do
-      run_cmd "hot" "dynamic" "$q" {{dbms_basedir}}/duckdb/build/release-dynamic/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+      run_cmd "hot" "dynamic" "$q" $tsk {{dbms_basedir}}/duckdb/build/release-dynamic/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' ${dthreads[@]+"${dthreads[@]}"} -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
     done
 
     echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
@@ -129,11 +144,11 @@ run_duckdb sf="100" monitor="false": #(setup_duckdb sf)
     echo "=== Running mte variant ===" >&2
     for q in `seq 1 22`
     do
-      run_cmd "warm" "mte" "$q" env GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" > /dev/null 2>&1
+      run_cmd "warm" "mte" "$q" $tsk env GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' ${dthreads[@]+"${dthreads[@]}"} -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" > /dev/null 2>&1
     done
     for q in `seq 1 22`
     do
-      run_cmd "hot" "mte" "$q" env GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+      run_cmd "hot" "mte" "$q" $tsk env GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' ${dthreads[@]+"${dthreads[@]}"} -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
     done
   fi
 
@@ -142,7 +157,7 @@ run_duckdb sf="100" monitor="false": #(setup_duckdb sf)
   for q in `seq 1 22`
   do
     echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
-    run_cmd "cold" "dynamic" "$q" {{dbms_basedir}}/duckdb/build/release-dynamic/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+    run_cmd "cold" "dynamic" "$q" $tsk {{dbms_basedir}}/duckdb/build/release-dynamic/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' ${dthreads[@]+"${dthreads[@]}"} -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
 
   # Run all MTE queries (cold cache - drop caches before each query)
@@ -150,7 +165,7 @@ run_duckdb sf="100" monitor="false": #(setup_duckdb sf)
   for q in `seq 1 22`
   do
     echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
-    run_cmd "cold" "mte" "$q" env GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
+    run_cmd "cold" "mte" "$q" $tsk env GLIBC_TUNABLES="glibc.mem.tagging=3" {{dbms_basedir}}/duckdb/build/release-mte/duckdb {{DATA_DIR}}/tpch-sf{{sf}}.db -no-stdin -c 'set enable_progress_bar=false' ${dthreads[@]+"${dthreads[@]}"} -c '.timer on' -c ".read {{dbms_basedir}}/workloads/TPCH/q$q.sql" | grep "Run Time" | awk -v query=$q '{printf "q%s,%s\n", query, $5}'
   done
 
 
@@ -205,14 +220,37 @@ build_redis:
   # CHERI Purecap - Uses environment variables from flake.nix
   build_target "cheri" "cheri" ""
 
-  # MTE - Uses ARCH flag
-  build_target "mte" "mte" ""
+  # MTE - Uses ARCH flag. Pin glibc-mte's ld.so (tagged-address syscall ABI) so
+  # heap-tagged pointers passed to syscalls (RDB/AOF writes) don't fail with EFAULT.
+  if [[ -z "${GLIBC_MTE:-}" ]]; then echo "Error: GLIBC_MTE unset (run in the eliza/cross-compiler devshell)"; exit 1; fi
+  build_target "mte" "mte" "REDIS_LDFLAGS=-Wl,--dynamic-linker=$GLIBC_MTE/lib/ld-linux-aarch64.so.1"
 
   # AArch64 Dynamic (MTE baseline) - Uses ARCH flag
   build_target "dynamic" "aarch64" ""
 
-# Run YCSB for redis
-run_redis recordcount="100000" operationcount="100000" monitor="false":
+# Run the eliza-side Redis variants for a single config point
+run_redis_eliza recordcount="100000" operationcount="100000" threads="1" monitor="false":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  for variant in "dynamic" "mte"; do
+    just dbms run_redis_local "$variant" "{{recordcount}}" "{{operationcount}}" "{{threads}}" "{{monitor}}"
+  done
+
+# Run the ace-side Redis variants for a single config point
+run_redis_ace recordcount="100000" operationcount="100000" threads="1" monitor="false":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  for variant in "static" "cheri"; do
+    if [[ "$variant" == "static" ]]; then
+      devshell="ace-aarch64"
+    else
+      devshell="ace-cheri"
+    fi
+    ssh ace "mkdir -p /var/tmp/nixbuild && cd {{dbms_basedir}} && TMPDIR=/var/tmp/nixbuild nix --extra-experimental-features flakes --extra-experimental-features nix-command develop .#${devshell} -c just dbms run_redis_local '$variant' '{{recordcount}}' '{{operationcount}}' '{{threads}}' '{{monitor}}'"
+  done
+
+# Run YCSB for redis across all four variants (both hosts) for one config point
+run_redis recordcount="100000" operationcount="100000" threads="1" monitor="false":
   #!/usr/bin/env bash
   set -euo pipefail
 
@@ -222,27 +260,20 @@ run_redis recordcount="100000" operationcount="100000" monitor="false":
     echo "variant,workload,rss_bytes" > "${result_dir}/redis_mem_footprint.csv"
   fi
 
-  for variant in "dynamic" "mte" "static" "cheri"; do
-    case "$variant" in
-      "dynamic" | "mte")
-        just dbms run_redis_local "$variant" "{{recordcount}}" "{{operationcount}}" "{{monitor}}"
-        ;;
-      "static" | "cheri")
-        if [[ "$variant" == "static" ]]; then
-          devshell="ace-aarch64"
-        else
-          devshell="ace-cheri"
-        fi
-        ssh ace "cd {{dbms_basedir}} && nix --extra-experimental-features flakes --extra-experimental-features nix-command develop .#${devshell} -c just dbms run_redis_local '$variant' '{{recordcount}}' '{{operationcount}}' '{{monitor}}'"
-        ;;
-    esac
-  done
+  just dbms run_redis_eliza "{{recordcount}}" "{{operationcount}}" "{{threads}}" "{{monitor}}"
+  just dbms run_redis_ace "{{recordcount}}" "{{operationcount}}" "{{threads}}" "{{monitor}}"
 
-run_redis_local variant recordcount operationcount monitor:
+run_redis_local variant recordcount operationcount threads="1" monitor="false":
   #!/usr/bin/env bash
   set -euo pipefail
 
   workloads_dir="{{DATA_DIR}}/workloads/YCSB"
+
+  if [ "{{threads}}" -eq 1 ]; then
+    cpus="0"
+  else
+    cpus="0-$(({{threads}} - 1))"
+  fi
 
   case "{{variant}}" in
     "dynamic")
@@ -276,7 +307,10 @@ run_redis_local variant recordcount operationcount monitor:
   for workload in a b c d e f; do
     echo "=== Running workload${workload} - {{variant}} ==="
 
-    eval ${server_env} ${redis_server} --dir {{DATA_DIR}} --ignore-warnings ARM64-COW-BUG &> /dev/null &
+    # `env` (not `eval`) so $! is the real redis-server PID, not a subshell we
+    # can't kill; otherwise the server orphans, keeps port 6379, and every later
+    # workload's fresh server fails to bind and runs against the stale orphan.
+    env ${server_env} ${redis_server} --dir {{DATA_DIR}} --ignore-warnings ARM64-COW-BUG &> /dev/null &
     server_pid=$!
 
     if [[ "{{monitor}}" == "true" ]]; then
@@ -304,19 +338,26 @@ run_redis_local variant recordcount operationcount monitor:
     sleep 1
 
     echo "=== REDIS_YCSB workload=${workload} variant={{variant}} phase=load ==="
-    ycsb.sh load redis -s -P ${workloads_dir}/workload${workload} \
-      -p "redis.host=127.0.0.1" \
-      -p "redis.port=6379" \
-      -p "recordcount={{recordcount}}"
-
-    echo "=== REDIS_YCSB workload=${workload} variant={{variant}} phase=run ==="
-    ycsb.sh run redis -s -P ${workloads_dir}/workload${workload} \
+    taskset -c $cpus ycsb.sh load redis -s -P ${workloads_dir}/workload${workload} \
       -p "redis.host=127.0.0.1" \
       -p "redis.port=6379" \
       -p "recordcount={{recordcount}}" \
-      -p "operationcount={{operationcount}}"
+      -p "threadcount={{threads}}"
 
-    ${redis_cli} shutdown || kill ${server_pid} &> /dev/null || true
+    echo "=== REDIS_YCSB workload=${workload} variant={{variant}} phase=run ==="
+    taskset -c $cpus ycsb.sh run redis -s -P ${workloads_dir}/workload${workload} \
+      -p "redis.host=127.0.0.1" \
+      -p "redis.port=6379" \
+      -p "recordcount={{recordcount}}" \
+      -p "operationcount={{operationcount}}" \
+      -p "threadcount={{threads}}"
+
+    # cheri's shutdown hangs on the ARM64/Morello COW fork bug even with nosave,
+    # so treat it as best-effort (short timeout) and force-kill the server by PID
+    # plus a pattern sweep to reap any orphan holding the port.
+    timeout 5 ${redis_cli} shutdown nosave &> /dev/null || true
+    kill -9 ${server_pid} &> /dev/null || true
+    pkill -9 -f "redis-server${suffix} --dir {{DATA_DIR}}" &> /dev/null || true
     rm -f {{DATA_DIR}}/dump.rdb
 
     wait ${server_pid} 2> /dev/null || true
@@ -417,10 +458,14 @@ build_leveldb:
     "-DCMAKE_TOOLCHAIN_FILE=../../utils/aarch64-static-toolchain.cmake" \
     "-DCMAKE_TOOLCHAIN_FILE=../../utils/aarch64-static-toolchain.cmake -DWITH_ZLIB=0"
 
-  # 3. MTE
+  # 3. MTE. Pin the dynamic linker to glibc-mte's ld.so: the MTE loader enables
+  # the tagged-address syscall ABI, without which heap-tagged pointers passed to
+  # syscalls (e.g. LevelDB's WAL write) fail with EFAULT ("Bad address").
+  if [[ -z "${GLIBC_MTE:-}" ]]; then echo "Error: GLIBC_MTE unset (run in the eliza devshell)"; exit 1; fi
+  mte_ld="-DCMAKE_EXE_LINKER_FLAGS=-Wl,--dynamic-linker=$GLIBC_MTE/lib/ld-linux-aarch64.so.1"
   build_target "mte" \
-    "-DCMAKE_C_FLAGS='-march=armv8.5-a+memtag -DMTE' -DCMAKE_CXX_FLAGS='-march=armv8.5-a+memtag -DMTE'" \
-    "-DCMAKE_C_FLAGS='-march=armv8.5-a+memtag -DMTE' -DCMAKE_CXX_FLAGS='-march=armv8.5-a+memtag -DMTE' -DWITH_ZLIB=0"
+    "-DCMAKE_C_FLAGS='-march=armv8.5-a+memtag -DMTE' -DCMAKE_CXX_FLAGS='-march=armv8.5-a+memtag -DMTE' $mte_ld" \
+    "-DCMAKE_C_FLAGS='-march=armv8.5-a+memtag -DMTE' -DCMAKE_CXX_FLAGS='-march=armv8.5-a+memtag -DMTE' -DWITH_ZLIB=0 $mte_ld"
 
   # 4. AArch64 Dynamic (MTE Baseline)
   build_target "dynamic" "" "-DWITH_ZLIB=0"
@@ -449,13 +494,40 @@ run_leveldb_bench threads="1":
   taskset -c $cpus {{dbms_basedir}}/leveldb/build/release-dynamic/db_bench ${bench_params}
   echo "=== Running threads $threads - ASan ==="
   taskset -c $cpus {{dbms_basedir}}/leveldb/build/release-asan/db_bench ${bench_params}
+  echo "=== Running threads $threads - RSan ==="
+  # RSan db_bench is nix-built from the TUM-DSE fork; resolve its store path.
+  rsan_db="$(nix --extra-experimental-features 'nix-command flakes' build {{dbms_basedir}}/..#leveldb-rsan --no-link --print-out-paths)/bin/db_bench"
+  # RSan intermittently SIGILLs in its atexit teardown *after* printing results;
+  # the numbers are already emitted, so don't let it abort the rest of the recipe.
+  taskset -c $cpus "$rsan_db" ${bench_params} || true
   echo "=== Running threads $threads - Static ==="
   ssh ace "taskset -c $cpus {{dbms_basedir}}/leveldb/build/release-static/db_bench ${bench_params}"
   echo "=== Running threads $threads - Cheri ==="
   ssh ace "taskset -c $cpus {{dbms_basedir}}/leveldb/build/release-cheri/db_bench ${bench_params}"
 
-# Run YCSB workloads against LevelDB
-run_leveldb recordcount="100000" operationcount="100000" threads="1" monitor="false":
+# Run the eliza-side LevelDB variants (MTE baseline + MTE) for a single config point
+run_leveldb_eliza threads="1" recordcount="100000" operationcount="100000" persistence="memory" monitor="false":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  for variant in "dynamic" "mte"; do
+    just dbms::run_leveldb_local "$variant" "{{threads}}" "{{recordcount}}" "{{operationcount}}" "{{persistence}}" "{{monitor}}"
+  done
+
+# Run the ace-side LevelDB variants (CHERI baseline + CHERI) for a single config point
+run_leveldb_ace threads="1" recordcount="100000" operationcount="100000" persistence="memory" monitor="false":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  for variant in "static" "cheri"; do
+    if [[ "$variant" == "static" ]]; then
+      devshell="ace-aarch64"
+    else
+      devshell="ace-cheri"
+    fi
+    ssh ace "mkdir -p /var/tmp/nixbuild && cd {{dbms_basedir}} && TMPDIR=/var/tmp/nixbuild nix --extra-experimental-features flakes --extra-experimental-features nix-command develop .#${devshell} -c just dbms::run_leveldb_local '$variant' '{{threads}}' '{{recordcount}}' '{{operationcount}}' '{{persistence}}' '{{monitor}}'"
+  done
+
+# Run YCSB workloads against LevelDB across all four variants (both hosts) for one config point
+run_leveldb recordcount="100000" operationcount="100000" threads="1" persistence="memory" monitor="false":
   #!/usr/bin/env bash
   set -euo pipefail
 
@@ -465,23 +537,10 @@ run_leveldb recordcount="100000" operationcount="100000" threads="1" monitor="fa
     echo "variant,workload,peak_rss_bytes" > "${result_dir}/leveldb_mem_footprint.csv"
   fi
 
-  for variant in "dynamic" "mte" "static" "cheri"; do
-    case "$variant" in
-      "dynamic" | "mte")
-        just dbms::run_leveldb_local "$variant" "{{threads}}" "{{monitor}}"
-        ;;
-      "static" | "cheri")
-        if [[ "$variant" == "static" ]]; then
-          devshell="ace-aarch64"
-        else
-          devshell="ace-cheri"
-        fi
-        ssh ace "cd {{dbms_basedir}} && nix --extra-experimental-features flakes --extra-experimental-features nix-command develop .#${devshell} -c just dbms::run_leveldb_local '$variant' '{{threads}}' '{{monitor}}'"
-        ;;
-    esac
-  done
+  just dbms::run_leveldb_eliza "{{threads}}" "{{recordcount}}" "{{operationcount}}" "{{persistence}}" "{{monitor}}"
+  just dbms::run_leveldb_ace "{{threads}}" "{{recordcount}}" "{{operationcount}}" "{{persistence}}" "{{monitor}}"
 
-run_leveldb_local suffix threads monitor:
+run_leveldb_local suffix threads recordcount="100000" operationcount="100000" persistence="memory" monitor="false":
   #!/usr/bin/env bash
   set -euo pipefail
 
@@ -490,16 +549,28 @@ run_leveldb_local suffix threads monitor:
   leveldb_props="${ycsb_dir}/leveldb/leveldb.properties"
   build_root="${ycsb_dir}/build/release-{{suffix}}"
   ycsb_bin="${build_root}/ycsb"
-  
+
   if [[ "{{suffix}}" == "mte" ]]; then
     ycsb_bin="env GLIBC_TUNABLES=\"glibc.mem.tagging=3\" $ycsb_bin"
   fi
-  
+
   if [ "{{threads}}" -eq 1 ]; then
     cpus="0"
   else
     cpus="0-$(({{threads}} - 1))"
   fi
+
+  # disk: DB on local SSD; memory: on tmpfs. Rebuilt each workload so it never
+  # accumulates across configs (which previously filled the disk).
+  if [[ "{{persistence}}" == "disk" ]]; then
+    db_dir="{{DATA_DIR}}/leveldb"
+  else
+    db_dir="/tmp"
+  fi
+  mkdir -p "${db_dir}"
+  db_path="${db_dir}/ycsb-leveldb-{{suffix}}"
+  rm -rf "${db_path}"
+  db_opts=(-p "leveldb.dbname=${db_path}" -p "leveldb.destroy=true")
 
   if [[ "{{monitor}}" == "true" ]]; then
     PAGE_SIZE=$(getconf PAGESIZE)
@@ -508,10 +579,11 @@ run_leveldb_local suffix threads monitor:
   fi
 
   for workload in a b c d e f; do
+    # Marker parsed by parse_leveldb_output; do not add sweep dims here.
     echo "=== Running workload${workload} - threads: {{threads}} - {{suffix}} ==="
-    
-    # Run workload in background to gather RSS 
-    taskset -c $cpus ${ycsb_bin} -load -run -db leveldb -P $workloads_dir/workload${workload} -P $leveldb_props -p threadcount={{threads}} -s &
+
+    # Run workload in background to gather RSS
+    taskset -c $cpus ${ycsb_bin} -load -run -db leveldb -P $workloads_dir/workload${workload} -P $leveldb_props -p threadcount={{threads}} -p recordcount={{recordcount}} -p operationcount={{operationcount}} ${db_opts[@]+"${db_opts[@]}"} -s &
     server_pid=$!
     
     if [[ "{{monitor}}" == "true" ]]; then
@@ -545,6 +617,9 @@ run_leveldb_local suffix threads monitor:
       rm -f "$temp_peak"
       echo "{{suffix}},${workload},${final_peak}" >> "${csv_output}"
     fi
+
+    # Reclaim the database between workloads so it never accumulates.
+    rm -rf "${db_path}"
   done
 
 build_sqlite:
@@ -696,7 +771,10 @@ run_sqlite_eliza warehouses="1" duration="60" clients="1" monitor="false":
 
     cd "${run_root}"
     
-    LD_LIBRARY_PATH="${ld_library_path}" LD_PRELOAD="${preload}" GLIBC_TUNABLES="${tunables}" py-tpcc --warehouses "{{warehouses}}" --duration "{{duration}}" --clients "{{clients}}" --ddl "${ddl_path}" --config "${config_path}" sqlite &
+    # Invoke the py-tpcc wrapper via bash, not its `#!/usr/bin/env bash` shebang:
+    # LD_LIBRARY_PATH forces glibc-mte (2.40) onto /usr/bin/env, which needs
+    # GLIBC_2.42 and dies instantly -- that silently killed every mte run.
+    LD_LIBRARY_PATH="${ld_library_path}" LD_PRELOAD="${preload}" GLIBC_TUNABLES="${tunables}" bash "$(which py-tpcc)" --warehouses "{{warehouses}}" --duration "{{duration}}" --clients "{{clients}}" --ddl "${ddl_path}" --config "${config_path}" sqlite &
     server_pid=$!
     
     if [[ "{{monitor}}" == "true" ]]; then
@@ -745,7 +823,13 @@ run_sqlite warehouses="1" duration="60" clients="1" monitor="false":
   fi
   
   just dbms::run_sqlite_eliza "{{warehouses}}" "{{duration}}" "{{clients}}" "{{monitor}}"
-  ssh ace "nix develop {{dbms_basedir}}/..#ace-cheri --command just -f {{dbms_basedir}}/dbms.just run_sqlite_ace '{{warehouses}}' '{{duration}}' '{{clients}}' '{{monitor}}'"
+  just dbms::run_sqlite_ace_remote "{{warehouses}}" "{{duration}}" "{{clients}}" "{{monitor}}"
+
+# Run the ace-side SQLite variants from eliza (ssh wrapper) for a single config point
+run_sqlite_ace_remote warehouses="1" duration="60" clients="1" monitor="false":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  ssh ace "mkdir -p /var/tmp/nixbuild && TMPDIR=/var/tmp/nixbuild nix develop {{dbms_basedir}}/..#ace-cheri --command just -f {{dbms_basedir}}/dbms.just run_sqlite_ace '{{warehouses}}' '{{duration}}' '{{clients}}' '{{monitor}}'"
 
 setup_ladybug sf="10":
   #!/usr/bin/env python
@@ -799,7 +883,9 @@ build_ladybug:
   ARCH=dynamic make -j release
   ARCH=dynamic make -j python
   ARCH=mte make clean
-  ARCH=mte make -j release
+  # Pin glibc-mte's ld.so for the mte benchmark executable (preserve BUILD_BENCHMARK).
+  if [[ -z "${GLIBC_MTE:-}" ]]; then echo "Error: GLIBC_MTE unset (run in the eliza/cross-compiler devshell)"; exit 1; fi
+  ARCH=mte EXTRA_CMAKE_FLAGS="-DBUILD_BENCHMARK=TRUE -DCMAKE_EXE_LINKER_FLAGS=-Wl,--dynamic-linker=$GLIBC_MTE/lib/ld-linux-aarch64.so.1" make -j release
   ARCH=mte make -j python
   ARCH=cheri make clean
   ARCH=cheri make -j release
@@ -878,6 +964,7 @@ run_ladybug_ace threads="4" sf="10" monitor="false":
 run_ladybug_eliza threads="4" sf="10" monitor="false":
   #!/usr/bin/env bash
   set -eu pipefail
+  just dbms::setup_ladybug "{{sf}}"
   export CSV_DIR="{{DATA_DIR}}/ladybug/dataset/"
   export SCALE_FACTOR="{{sf}}"
 
@@ -957,19 +1044,27 @@ run_ladybug threads="4" sf="10" monitor="false":
   
   just dbms::setup_ladybug "{{sf}}"
   just dbms::run_ladybug_eliza "{{threads}}" "{{sf}}" "{{monitor}}"
-  ssh ace "nix develop {{dbms_basedir}}/..#ace-aarch64 --command  just -f {{dbms_basedir}}/dbms.just setup_ladybug {{sf}}"
-  ssh ace "nix develop {{dbms_basedir}}/..#ace-aarch64 --command just -f {{dbms_basedir}}/dbms.just run_ladybug_ace '{{threads}}' '{{sf}}' '{{monitor}}'"
+  just dbms::run_ladybug_ace_remote "{{threads}}" "{{sf}}" "{{monitor}}"
+
+# Run the ace-side LadyBug variants from eliza (ssh wrapper) for a single config point
+run_ladybug_ace_remote threads="4" sf="10" monitor="false":
+  #!/usr/bin/env bash
+  set -eu pipefail
+  ssh ace "mkdir -p /var/tmp/nixbuild && TMPDIR=/var/tmp/nixbuild nix develop {{dbms_basedir}}/..#ace-aarch64 --command just -f {{dbms_basedir}}/dbms.just setup_ladybug {{sf}}"
+  ssh ace "mkdir -p /var/tmp/nixbuild && TMPDIR=/var/tmp/nixbuild nix develop {{dbms_basedir}}/..#ace-aarch64 --command just -f {{dbms_basedir}}/dbms.just run_ladybug_ace '{{threads}}' '{{sf}}' '{{monitor}}'"
 
 build_mysql:
   #!/usr/bin/env bash
   cd {{dbms_basedir}}/mysql
   cmake -S . -B build/release -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS="-march=armv8.5-a" -DCMAKE_CXX_FLAGS="-march=armv8.5-a"
   cmake --build build/release -j
-  cmake -S . -B build/release-mte -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS="-march=armv8.5-a+memtag -DMTE -isystem {{dbms_basedir}}/../utils" -DCMAKE_CXX_FLAGS="-march=armv8.5-a+memtag -DMTE -isystem {{dbms_basedir}}/../utils"
+  # Pin glibc-mte's ld.so so MTE heap-tagged pointers survive syscalls (see leveldb).
+  if [[ -z "${GLIBC_MTE:-}" ]]; then echo "Error: GLIBC_MTE unset (run in the eliza/cross-compiler devshell)"; exit 1; fi
+  cmake -S . -B build/release-mte -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS="-march=armv8.5-a+memtag -DMTE -isystem {{dbms_basedir}}/../utils" -DCMAKE_CXX_FLAGS="-march=armv8.5-a+memtag -DMTE -isystem {{dbms_basedir}}/../utils" -DCMAKE_EXE_LINKER_FLAGS="-Wl,--dynamic-linker=$GLIBC_MTE/lib/ld-linux-aarch64.so.1"
   cmake --build build/release-mte -j
 
 # Run TPC-C for mysql
-run_mysql monitor="false":
+run_mysql threads="4" table_size="10000" monitor="false":
   #!/usr/bin/env bash
   set -euo pipefail
 
@@ -986,9 +1081,9 @@ run_mysql monitor="false":
   db="${MYSQL_DB:-sbtest}"
   user="${MYSQL_USER:-root}"
   pass="${MYSQL_PASS:-}"
-  table_size="${OLTP_TABLE_SIZE:-10000}"
+  table_size="${OLTP_TABLE_SIZE:-{{table_size}}}"
   tables="${OLTP_TABLES:-1}"
-  threads="${OLTP_THREADS:-4}"
+  threads="${OLTP_THREADS:-{{threads}}}"
   duration="${OLTP_DURATION:-60}"
   report_interval="${OLTP_REPORT_INTERVAL:-10}"
 
@@ -1000,12 +1095,24 @@ run_mysql monitor="false":
     echo "variant,workload,peak_rss_bytes" > "${csv_output}"
   fi
 
+  # Robust shutdown: graceful, then escalate to SIGKILL. Armed for signals too so
+  # a killed or disconnected run never leaves an orphaned mysqld behind.
+  stop_mysqld() {
+    [[ -n "${MYSQLADMIN_CMD:-}" ]] && timeout 30 ${MYSQLADMIN_CMD} shutdown &>/dev/null || true
+    if [[ -n "${MYSQLD_PID:-}" ]] && kill -0 "${MYSQLD_PID}" 2>/dev/null; then
+      kill -TERM "${MYSQLD_PID}" 2>/dev/null || true
+      for _ in $(seq 1 30); do kill -0 "${MYSQLD_PID}" 2>/dev/null || break; sleep 1; done
+      kill -0 "${MYSQLD_PID}" 2>/dev/null && kill -KILL "${MYSQLD_PID}" 2>/dev/null || true
+    fi
+  }
+  trap stop_mysqld EXIT INT TERM HUP
+
   for suffix in "" "-mte"; do
     label="release"
     [[ "${suffix}" == "-mte" ]] && label="release-mte"
     echo "=== Running mysql (${label}) ==="
     build_root="{{dbms_basedir}}/mysql/build/release${suffix}"
-    run_root="{{dbms_basedir}}/mysql/build/run${suffix}"
+    run_root="{{DATA_DIR}}/mysql/run${suffix}"
     data_dir="${run_root}/data"
     pid_path="${run_root}/mysqld.pid"
     log_path="${run_root}/mysqld.log"
@@ -1041,11 +1148,12 @@ run_mysql monitor="false":
       --pid-file="${pid_path}" \
       --port="${port}" \
       --bind-address=127.0.0.1 \
+      --max-connections=$(( threads + 64 )) \
       --plugin-dir="${build_root}/lib/plugin" \
       --log-error="${log_path}" &>"${log_path}" &
     mysqld_pid=$!
-
-    trap 'echo "Terminated, stopping mysql"; ${mysqladmin_cmd} shutdown &>/dev/null || kill ${mysqld_pid} &>/dev/null || true' EXIT
+    MYSQLD_PID="${mysqld_pid}"
+    MYSQLADMIN_CMD="${mysqladmin_cmd}"
 
     # Wait for MySQL to be ready
     for _ in {1..50}; do
@@ -1088,8 +1196,7 @@ run_mysql monitor="false":
 
     ${sysbench_bin} ${oltp_script} ${sysbench_opts} cleanup
 
-    ${mysqladmin_cmd} shutdown
-    trap - EXIT
+    stop_mysqld
 
     if [[ "{{monitor}}" == "true" ]]; then
 
@@ -1105,9 +1212,9 @@ run_mysql monitor="false":
 
 run_all_rss:
   #!/usr/bin/env bash
-  just dbms::run_duckdb 100 true
-  just dbms::run_redis 100000 100000 true
-  just dbms::run_leveldb 100000 100000 1 true
+  just dbms::run_duckdb 100 0 true
+  just dbms::run_redis 100000 100000 1 true
+  just dbms::run_leveldb 100000 100000 1 memory true
   just dbms::run_sqlite 1 60 1 true
-  just dbms::run_mysql true
+  just dbms::run_mysql 4 10000 true
   just dbms::run_ladybug 4 10 true

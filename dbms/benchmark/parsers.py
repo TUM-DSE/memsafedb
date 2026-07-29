@@ -283,14 +283,16 @@ def parse_leveldb_bench_output(output: str, repetition: int) -> Iterator[dict]:
             # Map simplified variant names to full names if needed
             # mte -> release-mte
             # dynamic -> release-dynamic or baseline-dynamic? 
-            # In dbms.just: release-mte, release-dynamic, release-asan, release-static, release-cheri
-            # The markers are: MTE, Dynamic, ASan, Static, Cheri
+            # In dbms.just: release-mte, release-dynamic, release-asan, release-rsan, release-static, release-cheri
+            # The markers are: MTE, Dynamic, ASan, RSan, Static, Cheri
             if current_variant_str == "mte":
                 current_variant = "release-mte"
             elif current_variant_str == "dynamic":
                 current_variant = "release-dynamic"
             elif current_variant_str == "asan":
                 current_variant = "release-asan"
+            elif current_variant_str == "rsan":
+                current_variant = "release-rsan"
             elif current_variant_str == "static":
                 current_variant = "release-static"
             elif current_variant_str == "cheri":
@@ -426,6 +428,8 @@ def parse_leveldb_output(output: str, repetition: int) -> Iterator[dict]:
                 current_variant = "release-dynamic"
             elif current_variant_str == "asan":
                 current_variant = "release-asan"
+            elif current_variant_str == "rsan":
+                current_variant = "release-rsan"
             elif current_variant_str == "static":
                 current_variant = "release-static"
             elif current_variant_str == "cheri":
