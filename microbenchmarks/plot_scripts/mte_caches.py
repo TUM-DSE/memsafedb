@@ -116,6 +116,7 @@ def plot_mode1(data: Dict[int, List], out_prefix: str, color_scheme: str):
     )
     ax.set_yscale("log")
     ax.set_ylabel("Throughput (GB/s)")
+    common.add_x_axis_label(ax, "Region size")
     ax.annotate(
         common.higher_better_str,
         color="blue",
@@ -188,6 +189,7 @@ def plot_mode2(data: Dict[int, List], out_prefix: str, color_scheme: str):
     )
     ax.tick_params(axis="y", pad=0, labelsize=common.FONTSIZE_TICK_LABEL)
     ax.tick_params(axis="x", pad=0, labelsize=common.FONTSIZE_TICK_LABEL)
+    common.add_x_axis_label(ax, "Region size")
     ax.grid(True, which="both", alpha=0.3)
     ax.legend(fontsize=common.FONTSIZE_LEGEND, loc="upper right")
     ax.annotate(

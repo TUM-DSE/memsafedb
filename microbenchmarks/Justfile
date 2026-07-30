@@ -109,15 +109,15 @@ plot:
     ./plot_scripts/inst_table.py ./results/mte/insts_mte.json > output/insts_mte.tex & \\
     ./plot_scripts/inst_table.py ./results/morello/insts_morello.json > output/insts_morello.tex & \\
     ./plot_scripts/inst_table.py ./results/x86/insts_x86.json > output/insts_x86.tex & \\
-    ./plot_scripts/plot_c_bench.py -o output/ptr_chase_morello --color-scheme non-mte --variants "AArch64,Purecap" --x-axis pow2 ./results/morello/ptr_chase_{normal,purecap}.csv & \\
-    ./plot_scripts/plot_c_bench.py -o output/atomic_ptr_table_morello --color-scheme non-mte --variants "AArch64,Purecap" --x-axis pow2 ./results/morello/atomic_ptr_table_{normal,purecap}.csv & \\
-    ./plot_scripts/plot_c_bench.py -o output/ptr_chase_mte --color-scheme mte --variants "Off,Sync,Async,No Tagging,Prctl Only" --x-axis pow2 ./results/mte/ptr_chase_{no,sync,async,no_tagging,prctl_only}_mte.csv & \\
-    ./plot_scripts/plot_c_bench.py -o output/memcpy_morello --color-scheme non-mte --show-legend --variants "AArch64,Purecap" ./results/morello/memcpy_{normal,purecap}.csv & \\
-    ./plot_scripts/plot_c_bench.py -o output/memcpy_mte --color-scheme mte --variants "Off,Sync,Async,No Tagging,Prctl Only" ./results/mte/memcpy_{no,sync,async,no_tagging,prctl_only}_mte.csv & \\
-    ./plot_scripts/plot_c_bench.py -o output/memset_morello --color-scheme non-mte --variants "AArch64,Purecap" ./results/morello/memset_{normal,purecap}.csv & \\
-    ./plot_scripts/plot_c_bench.py -o output/memset_mte --color-scheme mte --variants "Off,Sync,Async,No Tagging,Prctl Only" ./results/mte/memset_{no,sync,async,no_tagging,prctl_only}_mte.csv & \\
-    ./plot_scripts/plot_c_bench.py -o output/memread_morello --color-scheme non-mte --variants "AArch64,Purecap" ./results/morello/memread_{normal,purecap}.csv & \\
-    ./plot_scripts/plot_c_bench.py -o output/memread_mte --color-scheme mte --show-legend --variants "Off,Sync,Async,No Tagging,Prctl Only" ./results/mte/memread_{no,sync,async,no_tagging,prctl_only}_mte.csv & \\
+    ./plot_scripts/plot_c_bench.py -o output/ptr_chase_morello --color-scheme non-mte --variants "AArch64,Purecap" --x-axis pow2 --x-label "Pointers" ./results/morello/ptr_chase_{normal,purecap}.csv & \\
+    ./plot_scripts/plot_c_bench.py -o output/atomic_ptr_table_morello --color-scheme non-mte --variants "AArch64,Purecap" --x-axis pow2 --x-label "Pointers" ./results/morello/atomic_ptr_table_{normal,purecap}.csv & \\
+    ./plot_scripts/plot_c_bench.py -o output/ptr_chase_mte --color-scheme mte --variants "Off,Sync,Async,No Tagging,Prctl Only" --x-axis pow2 --x-label "Pointers" ./results/mte/ptr_chase_{no,sync,async,no_tagging,prctl_only}_mte.csv & \\
+    ./plot_scripts/plot_c_bench.py -o output/memcpy_morello --color-scheme non-mte --show-legend --variants "AArch64,Purecap" --x-label "Region size" ./results/morello/memcpy_{normal,purecap}.csv & \\
+    ./plot_scripts/plot_c_bench.py -o output/memcpy_mte --color-scheme mte --variants "Off,Sync,Async,No Tagging,Prctl Only" --x-label "Region size" ./results/mte/memcpy_{no,sync,async,no_tagging,prctl_only}_mte.csv & \\
+    ./plot_scripts/plot_c_bench.py -o output/memset_morello --color-scheme non-mte --variants "AArch64,Purecap" --x-label "Region size" ./results/morello/memset_{normal,purecap}.csv & \\
+    ./plot_scripts/plot_c_bench.py -o output/memset_mte --color-scheme mte --variants "Off,Sync,Async,No Tagging,Prctl Only" --x-label "Region size" ./results/mte/memset_{no,sync,async,no_tagging,prctl_only}_mte.csv & \\
+    ./plot_scripts/plot_c_bench.py -o output/memread_morello --color-scheme non-mte --variants "AArch64,Purecap" --x-label "Region size" ./results/morello/memread_{normal,purecap}.csv & \\
+    ./plot_scripts/plot_c_bench.py -o output/memread_mte --color-scheme mte --show-legend --variants "Off,Sync,Async,No Tagging,Prctl Only" --x-label "Region size" ./results/mte/memread_{no,sync,async,no_tagging,prctl_only}_mte.csv & \\
     ./plot_scripts/mte_caches.py -o output/mte_caches --color-scheme mte ./results/mte/mte_caches.txt & \\
     ./plot_scripts/mte_caches.py -o output/cheri_caches --color-scheme non-mte ./results/morello/cheri_caches.txt & \\
     ./plot_scripts/plot_cheri_narrow_bounds.py -o output/cheri_narrow_bounds --labels "no narrowing,narrowing" ./results/morello/narrow_base.csv ./results/morello/narrow_cheri.csv & \

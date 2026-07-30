@@ -57,7 +57,9 @@ def main():
     parser.add_argument("-o", "--output", default="benchmark_overhead_grouped.pdf", help="Output filename")
     parser.add_argument("--title", default="Execution Time Overhead (Normalized)", help="Plot title")
     parser.add_argument("--x-axis", choices=["bytes", "pow2"], default="bytes",
-                        help="X-axis label formatting")
+                        help="X-axis tick formatting")
+    parser.add_argument("--x-label", default="Size",
+                        help="X-axis label text (placed left of the x-tick labels)")
     parser.add_argument(
         "--color-scheme",
         choices=["mte", "non-mte", "default"],
@@ -234,6 +236,7 @@ def main():
     ax.set_ylabel("Overhead", fontsize=common.FONTSIZE, labelpad=0)
     ax.tick_params(axis="y", pad=0, labelsize=common.FONTSIZE)
     ax.tick_params(axis="x", pad=0, labelsize=common.FONTSIZE)
+    common.add_x_axis_label(ax, args.x_label)
     # Pick enough decimal places that ticks stay distinct even when the
     # overhead range is tiny (otherwise a narrow range collapses to "1.00x"
     # repeated for every tick).

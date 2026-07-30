@@ -148,6 +148,32 @@ style_map = {
         'release-cheri': {'color': CHERI_COLOR, 'hatch': CHERI_HATCH, 'label': 'CHERI'},
 }
 
+def add_x_axis_label(ax, text):
+    """Place an x-axis label in the empty bottom-left corner, to the left of
+    and vertically aligned with the x-tick labels (so it costs no extra
+    vertical/horizontal space). The vertical position is measured from the
+    actual leftmost tick label, so it tracks pow2 (2^n) and plain (KiB) ticks
+    alike instead of relying on a hand-tuned offset."""
+    fig = ax.figure
+    fig.canvas.draw()  # ensure tick labels have real extents
+    labels = [t for t in ax.get_xticklabels() if t.get_text()]
+    if labels:
+        bb = labels[0].get_window_extent()
+        y_frac = ax.transAxes.inverted().transform((0, bb.y0))[1]
+    else:
+        y_frac = 0
+    ax.annotate(
+        text,
+        xy=(0.05, y_frac),
+        xycoords="axes fraction",
+        xytext=(0, -1),
+        textcoords="offset points",
+        ha="right",
+        va="bottom",
+        fontsize=FONTSIZE,
+        annotation_clip=False,
+    )
+
 lower_better_str = "Lower is better ↓"
 higher_better_str = "Higher is better ↑"
 left_better_str = "Lower is better ←"

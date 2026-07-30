@@ -130,6 +130,7 @@ def main():
     )
     ax.tick_params(axis="y", pad=0, labelsize=common.FONTSIZE_TICK_LABEL)
     ax.tick_params(axis="x", pad=0, labelsize=common.FONTSIZE_TICK_LABEL)
+    common.add_x_axis_label(ax, "Region size")
     ax.annotate(
         common.lower_better_str,
         color="blue",
