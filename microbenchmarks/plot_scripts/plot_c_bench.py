@@ -222,13 +222,31 @@ def main():
         fontsize=common.FONTSIZE,
         ha=("right" if place_right else "left"),
     )
-    ax.yaxis.set_major_formatter(FuncFormatter(lambda y, _: f"{y:.2f}"))
+#    ax.text(
+#        -0.09, 1.02,
+#        "Overhead",
+#        transform=ax.transAxes,
+#        ha="center",
+#        va="bottom",
+#        fontsize=common.FONTSIZE,
+#        clip_on=False,
+#    )
+    ax.set_ylabel("Overhead", fontsize=common.FONTSIZE, labelpad=0)
+    ax.tick_params(axis="y", pad=0, labelsize=common.FONTSIZE)
+    ax.tick_params(axis="x", pad=0, labelsize=common.FONTSIZE)
+    # Pick enough decimal places that ticks stay distinct even when the
+    # overhead range is tiny (otherwise a narrow range collapses to "1.00x"
+    # repeated for every tick).
+    y_range = ylim_high - ylim_low
+    decimals = 2 if y_range <= 0 else min(3, max(2, int(np.ceil(-np.log10(y_range))) + 1))
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda y, _: f"{y:.{decimals}f}$\\times$"))
     ax.grid(axis='y', linestyle='--', alpha=0.5, zorder=0)
     
     # Baseline line
     ax.axhline(y=1.0, color='black', linestyle='-', linewidth=1, zorder=2, alpha=0.3)
 
     plt.tight_layout()
+    fig.subplots_adjust(left=0.20)
     plt.savefig(f"{args.output}.pdf")
     print(f"Chart saved to {args.output}.pdf")
 

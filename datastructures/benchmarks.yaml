@@ -7,7 +7,7 @@ definitions:
       capabilities: ["can_multithread"]
       to_evaluate: ["ycsb"]
     - name: "btree"
-      capabilities: ["can_scan", "can_grow", "can_scan", "can_update"]
+      capabilities: ["can_scan", "can_grow", "can_update", "can_multithread"]
       to_evaluate: ["ycsb"]
       extra_args: ["fieldcount=1", "fieldlength=10"]
     - name: "skiplist"

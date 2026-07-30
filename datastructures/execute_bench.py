@@ -24,6 +24,15 @@ max_time = 600
 nbops_dataframe = pd.DataFrame()
 debug_mode = False
 
+# The paper uses only the single-operation microbenchmarks (read/insert/update/
+# scan/queue_bench), not the composite YCSB-A..F workloads. They stay in
+# benchmarks.yaml but are skipped here.
+SKIP_COMBINED_YCSB = True
+# Fallback cap for op counts when a (system, nthreads) has no nb_ops.csv row
+# (e.g. btree, newly multithreaded): scale the 1-thread count by the thread
+# count, capped for memory (8GB btree buffer) + 600s-timeout safety.
+NBOPS_MT_CAP = 50_000_000
+
 commands = {
         "ycsb": "/scratch/{}/memsafedb_bin/ycsb".format(getpass.getuser()),
         "queue_bench": "/scratch/{}/memsafedb_bin/queue_bench".format(getpass.getuser()),
@@ -42,6 +51,8 @@ def calculate_weighted_average_latency(log_text):
         if "operations;" in lines[i] and "[" in lines[i] and "Avg=" in lines[i]:
             target_line = lines[i]
             break
+    if target_line is None:
+        return None
     op_pattern = re.compile(r'\[([a-zA-Z0-9_-]+):.*?Count=(\d+).*?Avg=(\d+(?:\.\d+)?)\]')
     matches = op_pattern.findall(target_line)
     total_ops_count = 0
@@ -116,13 +127,25 @@ class Configuration:
         self.args = args
         self.nb_ops = 0
 
-    def get_conf(self):
+    def _nbops_row(self, nthreads):
         return nbops_dataframe[
                 (nbops_dataframe['host'] == self.host) &
                 (nbops_dataframe['system'] == self.system) &
                 (nbops_dataframe['name'] == self.name) &
-                (nbops_dataframe['nthreads'] == int(self.nthreads))
+                (nbops_dataframe['nthreads'] == int(nthreads))
                 ]['nb_ops']
+
+    def get_conf(self):
+        exact = self._nbops_row(self.nthreads)
+        if len(exact):
+            return int(exact.tolist()[0])
+        # no tuned row for this thread count: reuse the 1-thread count, so the
+        # sweep holds total work fixed and varies only parallelism (this is what
+        # the tuned ace rows already do). Returns None if even 1T is missing.
+        base = self._nbops_row(1)
+        if not len(base):
+            return None
+        return min(int(base.tolist()[0]), NBOPS_MT_CAP)
     
     def get_command(self, nb_ops):
         cmd = ""
@@ -146,21 +169,34 @@ class Configuration:
 
     def format_output(self, stdout ,rep):
         out = ""
-        if not debug_mode:
+        if debug_mode:
+            return out
+        if not stdout:
+            print(f"no output: {self.system} {self.name} t={self.nthreads} {self.arch}")
+            return out
+        try:
             match(self.type_bench):
                 case "ycsb":
                     latency = calculate_weighted_average_latency(stdout)
+                    if latency is None:
+                        raise ValueError("no YCSB summary line (timeout?)")
                     out += "{},{},{},{},{},{},{},{}\n".format(rep, self.host, self.arch, self.system, self.name, self.nthreads, self.nb_ops, latency)
                 case "queue_bench":
                     time = float(stdout.split(" ")[7]) * 10**9
                     thrpt = self.nb_ops / time
                     lat = 1/thrpt
                     out += "{},{},{},{},{},{},{},{:.3f}\n".format(rep, self.host, self.arch, self.system, self.name, self.nthreads, self.nb_ops, lat)
+        except (ValueError, IndexError, ZeroDivisionError) as exc:
+            print(f"unparsable: {self.system} {self.name} t={self.nthreads} "
+                  f"{self.arch} nb_ops={self.nb_ops}: {exc}")
         return out
 
     def execute(self, starting_nb_ops, rep, extension) -> str:
         conf = self.get_conf()
-        self.nb_ops = conf.tolist()[0]
+        if conf is None:
+            print(f"skip (no nb_ops): {self.system} {self.name} t={self.nthreads}")
+            return ""
+        self.nb_ops = conf
         cmd = self.get_command(self.nb_ops)
         process = run_process(self.host, cmd)
         out = "{} - {} - {} - {} - {} - {} - {}\n".format(rep, self.host, self.arch, self.system, self.name, self.nthreads, self.nb_ops)
@@ -182,6 +218,10 @@ class ExpeEngine(Engine):
         self.args_parser.add_argument("--workloads", type=str, help="Comma separated list of the workloads to evaluate", default="all")
         self.args_parser.add_argument("--repetitions", type=int, help="Number of repetitions", default=5)
         self.args_parser.add_argument("--debug", type=bool, help="Debug mode", default=False)
+        self.args_parser.add_argument("--output", type=str, default=None,
+                                      help="Result CSV name (default datastructures_<ext>.csv)")
+        self.args_parser.add_argument("--append", action="store_true",
+                                      help="Append to the result CSV instead of truncating it")
 
     def make_confs(self):
         with open("benchmarks.yaml", 'r') as f:
@@ -204,6 +244,8 @@ class ExpeEngine(Engine):
                 extra_args= []
 
             for wl in wl_list:
+                if SKIP_COMBINED_YCSB and wl['name'].startswith('YCSB-'):
+                    continue
                 if wl['type'] in ds['to_evaluate']:
                     if set(wl['requires']).issubset(ds_caps):
                         args = wl['args'] + extra_args
@@ -241,12 +283,19 @@ class ExpeEngine(Engine):
     def run(self):
         cross = list(product(self.confs, [x for x in range(self.args.repetitions)]))
         random.shuffle(cross)
-        out_file = open(os.path.join(RESULT_DIR, "datastructures_{}.csv".format(self.args.extensions[0])), "w")
-        out_file.write("repetition,host,arch,system,name,nthreads,nb_ops,latency\n")
+        name = self.args.output or "datastructures_{}.csv".format(self.args.extensions[0])
+        path = os.path.join(RESULT_DIR, name)
+        fresh = not (self.args.append and os.path.exists(path))
+        out_file = open(path, "a" if self.args.append else "w")
+        if fresh:
+            out_file.write("repetition,host,arch,system,name,nthreads,nb_ops,latency\n")
+        print("writing {} ({} configurations x {} repetitions)".format(
+            path, len(self.confs), self.args.repetitions))
         for conf, r in tqdm.tqdm(cross, total=len(cross)):
             stdout = conf.execute(self.args.nbops, r, self.args.extensions[0])
             if len(stdout) != 0:
-                out_file.write(stdout) 
+                out_file.write(stdout)
+                out_file.flush()   # a multi-hour sweep must not lose everything if killed
         out_file.close()
 
 def main():

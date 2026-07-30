@@ -106,6 +106,8 @@
         gcc-morello = pkgs.callPackage ./nix/gcc.nix { inherit binutils-morello; };
         ycsb-bin = pkgs.callPackage ./nix/ycsb.nix {};
         py-tpcc = pkgs.callPackage ./nix/py-tpcc {};
+        rsan-toolchain = pkgs.callPackage ./nix/rsan/toolchain.nix {};
+        leveldb-rsan = pkgs.callPackage ./nix/rsan/leveldb.nix { inherit rsan-toolchain; };
       };
       devShells = {
         "plotter" = pkgs.mkShell {

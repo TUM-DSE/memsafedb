@@ -121,11 +121,15 @@ def main():
     plt.xscale("log", base=2)
     ax = plt.gca()
     ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: fmt_size(v)))
-    plt.xticks(fontsize=common.FONTSIZE_TICK_LABEL - 3)
-    plt.yticks(fontsize=common.FONTSIZE_TICK_LABEL - 1)
     plt.yscale("log")
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:g}"))
-    plt.ylabel("Time (ms)")
+    ax.set_ylabel(
+        "Time (ms)",
+        fontsize=common.FONTSIZE_TICK_LABEL,
+        labelpad=0,
+    )
+    ax.tick_params(axis="y", pad=0, labelsize=common.FONTSIZE_TICK_LABEL)
+    ax.tick_params(axis="x", pad=0, labelsize=common.FONTSIZE_TICK_LABEL)
     ax.annotate(
         common.lower_better_str,
         color="blue",

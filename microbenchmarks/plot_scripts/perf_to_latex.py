@@ -87,11 +87,11 @@ def format_value(value: float, metric: str, is_best: bool = False,
                   'L1-dcache-loads', 'L1-dcache-load-misses', 'branches']:
         # Large numbers - use G/M/K suffix with \, separator
         if value >= 1e9:
-            formatted = f"{value/1e9:.2f}\\,G"
+            formatted = f"\\num{{{value/1e9:.2f}e9}}"
         elif value >= 1e6:
-            formatted = f"{value/1e6:.0f}\\,M"
+            formatted = f"\\num{{{value/1e6:.0f}e6}}"
         elif value >= 1e3:
-            formatted = f"{value/1e3:.0f}\\,K"
+            formatted = f"\\num{{{value/1e3:.0f}e3}}"
         else:
             formatted = f"{value:.0f}"
     elif metric in ['IPC']:

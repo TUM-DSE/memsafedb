@@ -101,12 +101,14 @@ marker_def = [
 BASELINE_MTE_COLOR = lighten('#1F78B4', 0) # slightly lighter Dark blue
 MTE_COLOR = lighten('#1F78B4', 0.2)           # Light blue mathematically derived
 ASAN_COLOR = '#984EA3'                        # Purple
+RSAN_COLOR = '#4DAF4A'                        # Green (software sanitizer, distinct from ASan)
 BASELINE_CHERI_COLOR = lighten('#FF7F00', 0) # slightly lighter Dark Orange
 CHERI_COLOR = lighten('#FF7F00', 0.2)           # Light Orange mathematically derived
 
 BASELINE_MTE_HATCH = ''
 MTE_HATCH = '///'
 ASAN_HATCH = 'xx'
+RSAN_HATCH = '..'
 BASELINE_CHERI_HATCH = ''
 CHERI_HATCH = '\\\\\\\\'
 
@@ -116,6 +118,7 @@ style_map = {
         'release-dynamic': {'color': BASELINE_MTE_COLOR, 'hatch': BASELINE_MTE_HATCH, 'label': 'Baseline (MTE)'},
         'release-mte': {'color': MTE_COLOR, 'hatch': MTE_HATCH, 'label': 'MTE'},
         'release-asan': {'color': ASAN_COLOR, 'hatch': ASAN_HATCH, 'label': 'ASan'},
+        'release-rsan': {'color': RSAN_COLOR, 'hatch': RSAN_HATCH, 'label': 'RSan'},
         'release-cheri': {'color': CHERI_COLOR, 'hatch': CHERI_HATCH, 'label': 'CHERI'},
 }
 

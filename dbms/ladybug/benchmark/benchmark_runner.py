@@ -74,7 +74,7 @@ datasets_path = {
     'ldbc-sf01-ku': os.path.join(csv_base_dir, 'ldbc-sf01'),
     'ldbc-sf1-ku': os.path.join(csv_base_dir, 'ldbc-sf1'),
     'ldbc-sf10-ku': os.path.join(csv_base_dir, 'ldbc-sf10'),
-    'ldbc-sf100-ku': os.path.join(csv_base_dir, 'ldbc-100', 'csv'),
+    'ldbc-sf100-ku': os.path.join(csv_base_dir, 'ldbc-sf100'),
     'click-ku': os.path.join(csv_base_dir, 'click', 'hits'),
     'graph500-27-ku': os.path.join(csv_base_dir, 'graph500-27', 'csv'),
     'soc-livejournal-ku': os.path.join(csv_base_dir, 'soc-livejournal', 'csv'),

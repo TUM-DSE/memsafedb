@@ -75,7 +75,7 @@ def plot_mode1(data: Dict[int, List], out_prefix: str, color_scheme: str):
         print("No Mode 1 data found.")
         return
 
-    fig, ax = plt.subplots(figsize=(common.figwidth_half, common.fig_height * 1.4))
+    fig, ax = plt.subplots(figsize=(common.figwidth_half, common.fig_height * 1.1))
     
     labels = {
         0: "memset (MTE off)",
@@ -108,6 +108,8 @@ def plot_mode1(data: Dict[int, List], out_prefix: str, color_scheme: str):
             elinewidth=1,
         )
 
+    ax.tick_params(axis="y", pad=0, labelsize=common.FONTSIZE_TICK_LABEL)
+    ax.tick_params(axis="x", pad=0, labelsize=common.FONTSIZE_TICK_LABEL)
     ax.set_xscale("log", base=2)
     ax.xaxis.set_major_formatter(
         plt.FuncFormatter(lambda x, _: _format_bytes(x))
@@ -137,7 +139,7 @@ def plot_mode2(data: Dict[int, List], out_prefix: str, color_scheme: str):
         print("No Mode 2 data found.")
         return
 
-    fig, ax = plt.subplots(figsize=(common.figwidth_half, common.fig_height))
+    fig, ax = plt.subplots(figsize=(common.figwidth_third, common.fig_height * 1.1))
 
     colors = common.get_palette(color_scheme, 2)
     markers = common.get_markers(2)
@@ -175,17 +177,28 @@ def plot_mode2(data: Dict[int, List], out_prefix: str, color_scheme: str):
     ax.xaxis.set_major_formatter(
         plt.FuncFormatter(lambda x, _: _format_bytes(x))
     )
+    if color_scheme == "mte":
+        ymin, ymax = ax.get_ylim()
+        ax.set_ylim(ymin, max(ymax, 31.5))
     
-    ax.set_ylabel("Throughput (GB/s)")
+    ax.set_ylabel(
+        "Throughput (GB/s)",
+        fontsize=common.FONTSIZE_TICK_LABEL,
+        labelpad=0,
+    )
+    ax.tick_params(axis="y", pad=0, labelsize=common.FONTSIZE_TICK_LABEL)
+    ax.tick_params(axis="x", pad=0, labelsize=common.FONTSIZE_TICK_LABEL)
     ax.grid(True, which="both", alpha=0.3)
-    ax.legend(fontsize=common.FONTSIZE_LEGEND)
+    ax.legend(fontsize=common.FONTSIZE_LEGEND, loc="upper right")
     ax.annotate(
         common.higher_better_str,
         color="blue",
-        xy=(0.37, 0.83),
-        xycoords="figure fraction",
+        xy=(0.22, 0.50),
+        xycoords="axes fraction",
         annotation_clip=False,
         fontsize=common.FONTSIZE,
+        ha="center",
+        va="center",
     )
 
     out_file = f"{out_prefix}_mode2.pdf"
