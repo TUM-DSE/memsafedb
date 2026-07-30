@@ -284,10 +284,10 @@ def plot_datastructures(lat):
     fig.legend(handles=legend, loc='upper center', ncol=2, fontsize=FS_LEG,
                frameon=True, bbox_to_anchor=(0.5, 1.01), handlelength=1.3,
                handleheight=0.9, columnspacing=1.2, handletextpad=0.4)
-    fig.text(0.02, 0.995, lower_better_str, ha='left', va='top', color='blue',
+    fig.text(0.02, 0.995, '* not significant (overlapping confidence intervals)',
+             ha='left', va='top', color='0.4', fontsize=FS_NOTE)
+    fig.text(0.02, 0.958, lower_better_str, ha='left', va='top', color='blue',
              fontsize=FS_NOTE + 1)
-    fig.text(0.02, 0.953, '* not significant (overlapping CIs)', ha='left',
-             va='top', color='0.4', fontsize=FS_NOTE)
 
     out = os.path.join(result_dir, 'datastructures_all.pdf')
     plt.savefig(out, bbox_inches='tight', pad_inches=0.02)
