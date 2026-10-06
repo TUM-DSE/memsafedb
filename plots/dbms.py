@@ -462,6 +462,9 @@ def plot_all_systems(df: pd.DataFrame):
     plt.close()
     print("Generated dbms_all_systems.pdf")
 
+# Width of Fig. 1 as a fraction of \textwidth (must match the wrapfigure).
+FIG1_FRACTION = 0.65
+
 def plot_leveldb_motivation_slowdown(df: pd.DataFrame):
     data = df[
         (df['database'] == 'leveldb_motiv') &
@@ -531,7 +534,10 @@ def plot_leveldb_motivation_slowdown(df: pd.DataFrame):
     # frees horizontal space for the variants that actually carry the message.
     bar_variants = [v for v in variants_interest if baseline_map[v] != v]
 
-    figsize = (figwidth_half, fig_height)
+    # Final size in the paper (wrapfigure of FIG1_FRACTION \textwidth), so the
+    # PDF is included unscaled and its text matches the body text.
+    fs, fs_tick, fs_small = 9, 8, 7
+    figsize = (acm_width(FIG1_FRACTION), 1.9)
     fig, axes = plt.subplots(1, 2, figsize=figsize, sharey=True)
     
     metrics = ['Random inserts', 'Random reads']
@@ -584,7 +590,7 @@ def plot_leveldb_motivation_slowdown(df: pd.DataFrame):
             # bars it applies to. va='top' hangs it *below* the line, so the word
             # ends on the dashed line and leaves the headroom to the % labels.
             ax.text(x0 - 0.30, base_val, "Baseline", ha='center', va='top',
-                    rotation=90, fontsize=FONTSIZE_ANNOTATION, color='#404040')
+                    rotation=90, fontsize=fs_small, color='#404040')
 
         for i, var in enumerate(bar_variants):
             if var not in pivot.columns: continue
@@ -611,22 +617,22 @@ def plot_leveldb_motivation_slowdown(df: pd.DataFrame):
                 f"${pct_diff:.0f}\\%$",
                 ha='center',
                 va='bottom',
-                fontsize=FONTSIZE_ANNOTATION,
+                fontsize=fs_small,
                 color='black'
             )
 
         import matplotlib.patches as patches
         
-        title_height = 0.1
+        title_height = 0.13
         title_rect = patches.Rectangle((0, 1), 1, title_height, transform=ax.transAxes, facecolor='#E0E0E0', edgecolor='none', clip_on=False)
         ax.add_patch(title_rect)
         
-        ax.text(0.5, 1 + title_height/2, workload, transform=ax.transAxes, ha='center', va='center', fontsize=FONTSIZE, color='black', fontweight='bold')
+        ax.text(0.5, 1 + title_height/2, workload, transform=ax.transAxes, ha='center', va='center', fontsize=fs, color='black', fontweight='bold')
         ax.set_xticks(counts)
         ax.set_xticklabels([display_labels[v] for v in bar_variants],
-                           fontsize=FONTSIZE_TICK_LABEL, rotation=0)
+                           fontsize=fs_tick, rotation=0)
         ax.yaxis.set_major_formatter(ticker.FuncFormatter(format_big_numbers_tweaked))
-        ax.tick_params(axis='y', labelsize=FONTSIZE_TICK_LABEL)
+        ax.tick_params(axis='y', labelsize=fs_tick)
 
         # The baselines are lines now, not bars, so autoscale may not cover them.
         # Headroom only needs to clear the % labels; the "Baseline" labels hang
@@ -663,15 +669,16 @@ def plot_leveldb_motivation_slowdown(df: pd.DataFrame):
                 spans.append(((divider_x if divider_x is not None else xlo, xhi), "Morello"))
             for (a, b), label in spans:
                 ax.text((a + b) / 2, 0.97, label, transform=trans,
-                        ha='center', va='top', fontsize=FONTSIZE_TICK_LABEL-1,
+                        ha='center', va='top', fontsize=fs_small,
                         fontweight='bold', color='gray')
 
-    axes[0].set_ylabel('Throughput (ops/sec)', fontsize=FONTSIZE_AXIS_LABEL)
+    axes[0].set_ylabel('Throughput (ops/sec)', fontsize=fs)
     
-    plt.tight_layout()
+    plt.tight_layout(pad=0.1)
     plt.subplots_adjust(wspace=0.1)
     output_path = os.path.join(result_dir, 'dbms_leveldb_motiv.pdf')
-    plt.savefig(output_path, format='pdf', bbox_inches='tight')
+    # No bbox_inches="tight": keep the exact width so LaTeX does not rescale.
+    plt.savefig(output_path, format="pdf")
     plt.close()
     
     print("Generated dbms_leveldb_motiv.pdf")

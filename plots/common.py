@@ -21,6 +21,12 @@ figwidth_third = 2
 figwidth_half = 3.3
 figwidth_full = 7
 fig_height = 1.5
+# acmsmall (PACMMOD) layout: plots generated at their final width so LaTeX
+# includes them unscaled (see Fig. 1 in dbms.py).
+ACM_TEXTWIDTH = 395.8225 / 72.27  # \textwidth in inches
+ACM_FONTSIZE = 10                  # body text (\normalsize)
+ACM_FONTSIZE_SMALL = 8             # annotations (\footnotesize)
+
 FONTSIZE=7
 
 # Derived font sizes for consistency
@@ -29,6 +35,10 @@ FONTSIZE_TICK_LABEL = FONTSIZE
 FONTSIZE_LEGEND = FONTSIZE - 1
 FONTSIZE_TITLE = FONTSIZE - 1
 FONTSIZE_ANNOTATION = FONTSIZE - 2
+
+def acm_width(fraction):
+    """Width in inches of a figure spanning `fraction` of \\textwidth."""
+    return ACM_TEXTWIDTH * fraction
 
 def format_big_numbers(x, pos):
     if x >= 1e9:
