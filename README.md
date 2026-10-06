@@ -1,6 +1,6 @@
 # MemSafeDB — Artifact Evaluation
 
-> This repository contains the artifact for the paper: *Should Your Database Systems Use Hardware-Assisted Memory Safety Extensions in Production?*
+> This repository contains the artifact for the paper: *Should Your Database Systems Use Hardware-Assisted Memory Safety Extensions in Production?* (Accepted at SIGMOD'27).
 
 ## Abstract
 
@@ -19,6 +19,7 @@ characterise the prevalence and impact of memory-safety vulnerabilities in produ
 ```
 memsafedb/
 ├── bug_study/          # Bug & CVE scraping, LLM classification, export  →  Details: bug_study/README.md
+├── bug_classes/        # Bug-class detection suite (MTE, CHERI)  →  Details: bug_classes/README.md
 ├── microbenchmarks/    # Microarchitecture benchmarks (MTE, CHERI, MPK)  →  Details: microbenchmarks/README.md
 ├── datastructures/     # Data-structure benchmarks (YCSB, queue_bench)
 ├── dbms/               # Full DBMS source trees + benchmark harness
@@ -96,6 +97,22 @@ just dbms run_all_rss             # collect peak RSS for memory-overhead plot
 ```
 
 Results → `results/` (per-DBMS CSVs) and `results/dbms_rss/` (memory footprint CSVs)
+
+### 5 — Bug-Class Detection
+
+Small reproductions of each memory-safety bug class of the bug study, run
+without protection, with MTE, and with CHERI to show which classes each
+mechanism detects.
+> **Full instructions:** [`bug_classes/README.md`](bug_classes/README.md)
+
+```bash
+just bugclasses::build_host      # on eliza (eliza devshell)
+just bugclasses::build_cheri     # cross-compiler devshell
+just bugclasses::run_all 200     # CHERI configs run on ace over ssh
+just bugclasses::table
+```
+
+Results → `results/bug_classes/`
 
 ---
 

@@ -7,6 +7,7 @@ bin_dir := "/scratch/"+user+"/memsafedb_bin/" # if modified, replicate this in e
 mod structs 'datastructures/structs.just'
 mod dbms 'dbms/dbms.just'
 mod bugs 'bug_study/bugs.just'
+mod bugclasses 'bug_classes/bug_classes.just'
 
 
 build_structs arch="aarch64":
