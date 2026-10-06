@@ -61,7 +61,8 @@ MACROS = r"""% Cell macros for the bug-class table (requires xcolor, colortbl, p
 \newcommand{\BcLibc}{\cellcolor{bcother}libc}                             % allocator/libc check
 \newcommand{\BcCrash}{\cellcolor{bcother}crash}                           % crash without detection
 \newcommand{\BcSilent}{\cellcolor{bcmiss}\ding{55}}                       % undetected
-\newcommand{\BcNoOS}{\cellcolor{bcos}OS}                                  % needs revocation (OS)
+\newcommand{\BcOSFault}{\cellcolor{bcother}OS}                              % page fault on unmapped memory
+\newcommand{\BcNoOS}{\cellcolor{bcos}rev.}                                % needs revocation (unsupported by the OS)
 \newcommand{\BcLegend}[2]{\colorbox{#1}{\makebox[1.8em]{\strut #2}}}      % legend entry
 """
 
@@ -70,6 +71,7 @@ CELLS = {
     "partial": r"\BcPartial{%s}",
     "libc": r"\BcLibc",
     "crash": r"\BcCrash",
+    "os": r"\BcOSFault",
     "miss": r"\BcSilent",
     "noos": r"\BcNoOS",
 }
@@ -108,7 +110,11 @@ def classify_case(rows: list[dict]) -> tuple[str, int]:
         return "prob", round(100 * detected / runs)
     buckets = {
         "libc": total(lambda r: r["outcome"] == "runtime_abort"),
-        "crash": total(lambda r: r["outcome"] in ("crash", "hang", "exit", "unknown")),
+        # Page faults on unmapped memory (e.g., the zero page): stopped by the
+        # OS memory layout, not by the mechanism.
+        "os": total(lambda r: r["outcome"] == "crash" and r["detail"] == "segv_maperr"),
+        "crash": total(lambda r: r["outcome"] in ("crash", "hang", "exit", "unknown")
+                       and r["detail"] != "segv_maperr"),
         "miss": total(lambda r: r["outcome"] == "silent"),
     }
     return max(buckets, key=lambda k: buckets[k]), 0
@@ -129,6 +135,8 @@ def aggregate(config: str, cls: str, cases: list[list[dict]]) -> tuple[str, list
         return "partial", probs
     if all(k == "libc" for k in kinds):
         return "libc", probs
+    if all(k == "os" for k in kinds):
+        return "os", probs
     if all(k == "crash" for k in kinds):
         return "crash", probs
     return "miss", probs
